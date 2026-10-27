@@ -1,4 +1,9 @@
 import type { AppConfig } from '../model/types.ts'
+import { focalLength35ToVerticalFov } from '../model/cameraMath.ts'
+import { IPHONE_11_PRO_PHOTO_REFERENCE } from './photoReference.ts'
+
+const referenceAspectRatio = IPHONE_11_PRO_PHOTO_REFERENCE.rotatedWidthPx
+  / IPHONE_11_PRO_PHOTO_REFERENCE.rotatedHeightPx
 
 export const DEFAULT_CONFIG: AppConfig = {
   version: 1,
@@ -18,13 +23,17 @@ export const DEFAULT_CONFIG: AppConfig = {
     azimuthDeg: -140,
     elevationDeg: -24,
     rollDeg: 0,
-    verticalFovDeg: 50,
-    aspectRatio: 4 / 3,
+    verticalFovDeg: focalLength35ToVerticalFov(
+      IPHONE_11_PRO_PHOTO_REFERENCE.equivalentFocalLength35Mm,
+      referenceAspectRatio,
+    ),
+    aspectRatio: referenceAspectRatio,
   },
   cameraMode: 'free',
   overlayMode: 'overlay',
   modelOpacity: 0.72,
-  photoRotationDeg: 90,
+  photoRotationDeg: IPHONE_11_PRO_PHOTO_REFERENCE.requiredRotationDeg,
+  calibrationObservations: [],
   lensDistortion: null,
 }
 

@@ -22,10 +22,13 @@ summary { padding: 8px 2px; font-weight: 650; cursor: pointer; }
 .numeric-control { display: grid; grid-template-columns: 116px minmax(70px,1fr) 82px; gap: 7px; align-items: center; font-size: 12px; }
 input[type="range"] { accent-color: #2ca2ad; min-width: 60px; }
 input[type="number"] { width: 100%; color: #e7edf1; background: #151b20; border: 1px solid #505c66; border-radius: 4px; padding: 5px 22px 5px 6px; }
+select { color: #e7edf1; background:#151b20; border:1px solid #505c66; border-radius:4px; padding:5px; max-width:190px; }
 .number-wrap { position: relative; }
 .number-wrap i, .single-input i { position: absolute; right: 6px; top: 5px; color: #87949e; font-style: normal; pointer-events: none; }
 .derived, .hint, .status { color: #9daab4; font-size: 11px; line-height: 1.45; }
 .single-input { display: flex; justify-content: space-between; align-items: center; margin-top: 9px; font-size: 12px; }
+.zoom-control { display:grid; grid-template-columns:116px 1fr 48px; align-items:center; gap:7px; margin-top:9px; font-size:12px; }
+.zoom-control output { text-align:right; color:#aeb8bf; font-variant-numeric:tabular-nums; }
 .single-input > span:last-child { position: relative; width: 100px; }
 .file-button { display: block; text-align: center; font-size: 12px; }
 .file-button input { display: none; }
@@ -38,7 +41,13 @@ input[type="number"] { width: 100%; color: #e7edf1; background: #151b20; border:
 .button-grid > * { margin: 0; }
 .status.error { color: #ff9a91; }
 #workspace { position: relative; flex: 1; min-width: 0; display: grid; place-items: center; overflow: hidden; padding: 24px; background: #11161a; }
+#workspace.zoomed { display:block; overflow:auto; }
+#zoom-surface { width:100%; height:100%; display:grid; place-items:center; }
+#workspace.zoomed #zoom-surface { display:block; }
 #stage { position: relative; width: 100%; height: 100%; max-width: 100%; max-height: 100%; overflow: hidden; background: radial-gradient(circle at 50% 40%, #60717e, #26313a 70%); box-shadow: 0 8px 30px #0008; }
+#workspace.zoomed #stage { transform:scale(var(--calibration-zoom,1)); transform-origin:top left; }
+#workspace.zoomed #stage:not(.calibration-active) { cursor:grab; }
+#workspace.zoomed #stage.panning:not(.calibration-active) { cursor:grabbing; }
 #stage.photo-camera { width: min(100%, calc((100vh - 106px) * var(--aspect, 1.333))); height: auto; max-width: 100%; max-height: 100%; aspect-ratio: var(--aspect, 1.333); }
 #reference-photo, #viewport { position: absolute; inset: 0; width: 100%; height: 100%; }
 #reference-photo { display: none; object-fit: fill; }
@@ -48,5 +57,17 @@ input[type="number"] { width: 100%; color: #e7edf1; background: #151b20; border:
 #stage.model-only { background: radial-gradient(circle at 50% 40%, #60717e, #26313a 70%); }
 .empty-photo { display: none; position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 7px 11px; border-radius: 4px; color: #c8d0d6; background: #111b; font-size: 12px; pointer-events: none; }
 .empty-photo.visible { display: block; }
+.calibration-button { width:100%; margin:8px 0; }
+.calibration-list { color:#b8c3ca; font-size:11px; line-height:1.5; margin:6px 0 9px; }
+#stage.calibration-active { cursor:none; }
+#precision-cursor { display:none; position:absolute; z-index:7; width:30px; height:30px; margin:-15px; border:1px solid white; border-radius:50%; pointer-events:none; mix-blend-mode:difference; transform:scale(var(--inverse-calibration-zoom,1)); }
+#precision-cursor::before,#precision-cursor::after { content:""; position:absolute; background:white; }
+#precision-cursor::before { left:14px; top:-7px; width:1px; height:42px; }
+#precision-cursor::after { left:-7px; top:14px; width:42px; height:1px; }
+#stage.calibration-active #precision-cursor { display:block; }
+.calibration-marker { position:absolute; z-index:5; width:14px; height:14px; margin:-7px; border-radius:50%; background:transparent; color:white; border:2px solid #ff3b30; font-size:0; pointer-events:none; box-shadow:0 0 0 1px white; transform:scale(var(--inverse-calibration-zoom,1)); }
+.calibration-marker::before,.calibration-marker::after { content:""; position:absolute; background:#ff3b30; }
+.calibration-marker::before { left:5px; top:-5px; width:1px; height:20px; }
+.calibration-marker::after { left:-5px; top:5px; width:20px; height:1px; }
 .axis-note { position: absolute; right: 16px; bottom: 9px; color: #84919a; font-size: 10px; }
 input:disabled { opacity: .45; cursor: not-allowed; }

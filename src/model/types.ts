@@ -21,6 +21,7 @@ export interface PhotoCameraParameters {
 
 export type CameraMode = 'free' | 'photo'
 export type OverlayMode = 'photo' | 'model' | 'overlay'
+export interface CalibrationObservation { landmarkId: string; x: number; y: number }
 
 export interface AppConfig {
   version: 1
@@ -30,5 +31,6 @@ export interface AppConfig {
   overlayMode: OverlayMode
   modelOpacity: number
   photoRotationDeg: 0 | 90 | 180 | 270
+  calibrationObservations: CalibrationObservation[]
   lensDistortion: null
 }

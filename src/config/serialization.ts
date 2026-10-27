@@ -16,6 +16,13 @@ export function importConfig(json: string): AppConfig {
   const numbers = [c.x, c.y, c.z, c.azimuthDeg, c.elevationDeg, c.rollDeg, c.verticalFovDeg, c.aspectRatio]
   if (numbers.some((number) => typeof number !== 'number' || !Number.isFinite(number))) throw new Error('Ungültige Kameraparameter.')
   if (c.verticalFovDeg <= 1 || c.verticalFovDeg >= 179 || c.aspectRatio <= 0) throw new Error('Ungültiger Bildwinkel oder Seitenverhältnis.')
+  const calibrationObservations = Array.isArray(candidate.calibrationObservations)
+    ? candidate.calibrationObservations.filter((observation) =>
+      observation && typeof observation.landmarkId === 'string'
+      && typeof observation.x === 'number' && Number.isFinite(observation.x)
+      && typeof observation.y === 'number' && Number.isFinite(observation.y),
+    ).map(({ landmarkId, x, y }) => ({ landmarkId, x, y }))
+    : []
   return {
     version: 1,
     house: { ...candidate.house },
@@ -26,6 +33,7 @@ export function importConfig(json: string): AppConfig {
     photoRotationDeg: candidate.photoRotationDeg === 0 || candidate.photoRotationDeg === 180 || candidate.photoRotationDeg === 270
       ? candidate.photoRotationDeg
       : 90,
+    calibrationObservations,
     lensDistortion: null,
   }
 }

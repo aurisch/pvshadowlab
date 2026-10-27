@@ -8,6 +8,7 @@ describe('Konfigurations-JSON', () => {
     config.house.width = 11.25
     config.photoCamera.rollDeg = 2.5
     config.photoRotationDeg = 270
+    config.calibrationObservations=[{landmarkId:'ridge-n',x:-0.25,y:0.75}]
     expect(importConfig(exportConfig(config))).toEqual(config)
   })
 
