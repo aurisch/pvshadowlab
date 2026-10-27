@@ -30,6 +30,8 @@ input[type="number"] { width: 100%; color: #e7edf1; background: #151b20; border:
 .file-button { display: block; text-align: center; font-size: 12px; }
 .file-button input { display: none; }
 .segmented { display: flex; margin: 8px 0; }
+.photo-tools { display: grid; grid-template-columns: 70px 1fr 70px; gap: 5px; margin-top: 8px; }
+.photo-tools button { padding-inline: 5px; font-size: 11px; }
 .segmented button { flex: 1; border-radius: 0; font-size: 12px; }
 .slider-row { display: grid; grid-template-columns: 130px 1fr 42px; gap: 6px; align-items: center; font-size: 12px; }
 .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }

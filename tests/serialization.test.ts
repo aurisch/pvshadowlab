@@ -7,6 +7,7 @@ describe('Konfigurations-JSON', () => {
     const config = cloneDefaultConfig()
     config.house.width = 11.25
     config.photoCamera.rollDeg = 2.5
+    config.photoRotationDeg = 270
     expect(importConfig(exportConfig(config))).toEqual(config)
   })
 

@@ -20,6 +20,7 @@ Vite zeigt danach die lokale URL an. Weitere Prüfungen:
 - In der **freien Ansicht** lässt sich das Haus per Maus drehen, verschieben und zoomen.
 - Die **Fotokamera** wird numerisch oder per Slider über Position, Azimut, Elevation, Rollwinkel und vertikalen Bildwinkel eingestellt.
 - Beim Laden eines Fotos wird sein natives Seitenverhältnis übernommen und gesperrt. Foto und WebGL-Projektion belegen damit exakt dieselbe unverzerrte Fläche.
+- Jedes geladene Foto erhält automatisch die vorgeschriebene Rotation um 90° gegen den Uhrzeigersinn. Es kann anschließend in 90°-Schritten weitergedreht oder auf diese Pflichtrotation zurückgesetzt werden.
 - Die 3D-Deckkraft und die Darstellung von Foto, Modell oder Überlagerung sind umschaltbar.
 - Haus- und Kamerakonfiguration können als JSON exportiert/importiert werden. Die letzte gültige Konfiguration bleibt zusätzlich im localStorage des Browsers erhalten. Das Foto selbst wird weder gespeichert noch hochgeladen.
 

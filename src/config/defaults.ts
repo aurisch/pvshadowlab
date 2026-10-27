@@ -24,6 +24,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   cameraMode: 'free',
   overlayMode: 'overlay',
   modelOpacity: 0.72,
+  photoRotationDeg: 90,
   lensDistortion: null,
 }
 

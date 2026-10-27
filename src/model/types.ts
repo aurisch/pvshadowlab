@@ -29,5 +29,6 @@ export interface AppConfig {
   cameraMode: CameraMode
   overlayMode: OverlayMode
   modelOpacity: number
+  photoRotationDeg: 0 | 90 | 180 | 270
   lensDistortion: null
 }

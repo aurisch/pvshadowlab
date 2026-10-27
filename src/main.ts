@@ -9,6 +9,8 @@ import { cameraControls, derivedText, getPath, houseControls, setPath, type Nume
 const STORAGE_KEY = 'pv-shadowlab-config-v1'
 let config = loadSavedConfig()
 let photoUrl: string | null = null
+let sourcePhoto: HTMLImageElement | null = null
+let sourcePhotoName = ''
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 app.innerHTML = `
@@ -32,6 +34,11 @@ app.innerHTML = `
       </details>
       <details open><summary>Foto & Überlagerung</summary>
         <label class="file-button">Referenzfoto auswählen<input id="photo-input" type="file" accept="image/*"></label>
+        <div class="photo-tools" role="group" aria-label="Fotodrehung">
+          <button id="rotate-left" title="90° gegen den Uhrzeigersinn drehen">↶ 90°</button>
+          <button id="reset-rotation">Pflichtrotation 90° CCW</button>
+          <button id="rotate-right" title="90° im Uhrzeigersinn drehen">↷ 90°</button>
+        </div>
         <div class="segmented" role="group" aria-label="Darstellung">
           <button data-overlay="photo">Foto</button><button data-overlay="model">Modell</button><button data-overlay="overlay">Beides</button>
         </div>
@@ -169,16 +176,27 @@ element<HTMLInputElement>('opacity').addEventListener('input', (event) => {
 element<HTMLInputElement>('photo-input').addEventListener('change', (event) => {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
-  if (photoUrl) URL.revokeObjectURL(photoUrl)
-  photoUrl = URL.createObjectURL(file)
-  referencePhoto.onload = () => {
-    config.photoCamera.aspectRatio = referencePhoto.naturalWidth / referencePhoto.naturalHeight
-    config.cameraMode = 'photo'
-    syncControlValues()
-    element('photo-info').textContent = `${file.name} · ${referencePhoto.naturalWidth} × ${referencePhoto.naturalHeight} px · natives Seitenverhältnis fixiert`
-    applyConfig(false)
+  const sourceUrl = URL.createObjectURL(file)
+  const image = new Image()
+  image.onload = () => {
+    URL.revokeObjectURL(sourceUrl)
+    sourcePhoto = image
+    sourcePhotoName = file.name
+    config.photoRotationDeg = 90
+    renderRotatedPhoto()
   }
-  referencePhoto.src = photoUrl
+  image.onerror = () => {
+    URL.revokeObjectURL(sourceUrl)
+    showStatus('Das Foto konnte nicht gelesen werden.', true)
+  }
+  image.src = sourceUrl
+})
+element('rotate-left').addEventListener('click', () => rotatePhoto(90))
+element('rotate-right').addEventListener('click', () => rotatePhoto(-90))
+element('reset-rotation').addEventListener('click', () => {
+  if (!sourcePhoto) return
+  config.photoRotationDeg = 90
+  renderRotatedPhoto()
 })
 element('export-config').addEventListener('click', () => {
   const blob = new Blob([exportConfig(config)], { type: 'application/json' })
@@ -207,6 +225,49 @@ function showStatus(message: string, error = false): void {
   const status = element('status')
   status.textContent = message
   status.classList.toggle('error', error)
+}
+
+function rotatePhoto(deltaDeg: number): void {
+  if (!sourcePhoto) {
+    showStatus('Bitte zuerst ein Referenzfoto auswählen.', true)
+    return
+  }
+  config.photoRotationDeg = ((config.photoRotationDeg + deltaDeg + 360) % 360) as AppConfig['photoRotationDeg']
+  renderRotatedPhoto()
+}
+
+function renderRotatedPhoto(): void {
+  if (!sourcePhoto) return
+  const quarterTurn = config.photoRotationDeg === 90 || config.photoRotationDeg === 270
+  const canvas = document.createElement('canvas')
+  canvas.width = quarterTurn ? sourcePhoto.naturalHeight : sourcePhoto.naturalWidth
+  canvas.height = quarterTurn ? sourcePhoto.naturalWidth : sourcePhoto.naturalHeight
+  const context = canvas.getContext('2d')
+  if (!context) {
+    showStatus('Fotobearbeitung wird von diesem Browser nicht unterstützt.', true)
+    return
+  }
+  context.translate(canvas.width / 2, canvas.height / 2)
+  // Positive Konfigurationswinkel bedeuten fachlich CCW; Canvas dreht bei positivem
+  // Winkel im Bildschirmkoordinatensystem im Uhrzeigersinn, daher das Minuszeichen.
+  context.rotate(-config.photoRotationDeg * Math.PI / 180)
+  context.drawImage(sourcePhoto, -sourcePhoto.naturalWidth / 2, -sourcePhoto.naturalHeight / 2)
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      showStatus('Das gedrehte Foto konnte nicht erzeugt werden.', true)
+      return
+    }
+    if (photoUrl) URL.revokeObjectURL(photoUrl)
+    photoUrl = URL.createObjectURL(blob)
+    referencePhoto.onload = () => {
+      config.photoCamera.aspectRatio = referencePhoto.naturalWidth / referencePhoto.naturalHeight
+      config.cameraMode = 'photo'
+      syncControlValues()
+      element('photo-info').textContent = `${sourcePhotoName} · ${referencePhoto.naturalWidth} × ${referencePhoto.naturalHeight} px · ${config.photoRotationDeg}° CCW · Seitenverhältnis fixiert`
+      applyConfig(false)
+    }
+    referencePhoto.src = photoUrl
+  }, 'image/png')
 }
 
 updateUiState()

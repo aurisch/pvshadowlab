@@ -23,6 +23,9 @@ export function importConfig(json: string): AppConfig {
     cameraMode: candidate.cameraMode === 'photo' ? 'photo' : 'free',
     overlayMode: candidate.overlayMode === 'photo' || candidate.overlayMode === 'model' ? candidate.overlayMode : 'overlay',
     modelOpacity: typeof candidate.modelOpacity === 'number' ? Math.min(1, Math.max(0, candidate.modelOpacity)) : 0.72,
+    photoRotationDeg: candidate.photoRotationDeg === 0 || candidate.photoRotationDeg === 180 || candidate.photoRotationDeg === 270
+      ? candidate.photoRotationDeg
+      : 90,
     lensDistortion: null,
   }
 }
