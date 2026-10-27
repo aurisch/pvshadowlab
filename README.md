@@ -70,6 +70,15 @@ Die aus dem bereitgestellten EXIF-Datensatz übernommenen Werte sind:
 
 Für die geometrische Kalibrierung werden insbesondere das tatsächlich dargestellte Seitenverhältnis, die Drehung und das 26-mm-Kleinbildäquivalent verwendet. Die EXIF-Pixelachsen allein sind wegen der zusätzlich gespeicherten Orientierung nicht ausreichend, um Hoch- oder Querformat festzulegen. Blende, Belichtungszeit und ISO werden nur als Referenz dokumentiert und beeinflussen die virtuelle Lochkamera nicht.
 
+## Bekannte Gebäudemaße
+
+- Bestätigtes Rohmauerwerk: 8,99 × 8,99 m
+- Mögliche Putzstärke: ungefähr 3–5 cm je Seite, noch nicht bestätigt
+- Daraus mögliches fertiges Außenmaß: ungefähr 9,05–9,09 m
+- Dachneigung: vermutlich 30–35°, noch zu messen
+
+Bis das fertige Fassadenmaß gemessen ist, verwendet das Modell 8,99 m für Breite und Tiefe. Die unsichere Putzstärke wird nicht als vermeintlich exakter Geometriewert eingerechnet.
+
 ## Struktur
 
 - src/model: reine, testbare Geometrie- und Kamerarechnungen

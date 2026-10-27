@@ -5,13 +5,13 @@ import { DEFAULT_CONFIG } from '../src/config/defaults.ts'
 describe('Hausgeometrie', () => {
   it('berechnet die Firsthöhe aus Breite und Dachneigung', () => {
     expect(calculateRidgeRise(9, 30)).toBeCloseTo(2.598076, 6)
-    expect(calculateHouseGeometry(DEFAULT_CONFIG.house).ridgeHeight).toBeCloseTo(7.598076, 6)
+    expect(calculateHouseGeometry(DEFAULT_CONFIG.house).ridgeHeight).toBeCloseTo(5 + 8.99 / 2 * Math.tan(Math.PI / 6), 6)
   })
 
   it('modelliert Trauf- und Giebelüberstand getrennt', () => {
     const result = calculateHouseGeometry(DEFAULT_CONFIG.house)
-    expect(result.roof.left[0].x).toBeCloseTo(-4.85)
-    expect(result.roof.left[0].z).toBeCloseTo(-4.85)
+    expect(result.roof.left[0].x).toBeCloseTo(-4.845)
+    expect(result.roof.left[0].z).toBeCloseTo(-4.845)
     expect(result.roof.left[0].y).toBeCloseTo(5 - 0.35 * Math.tan(Math.PI / 6))
   })
 

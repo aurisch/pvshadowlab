@@ -1,6 +1,7 @@
 import type { AppConfig } from '../model/types.ts'
 import { focalLength35ToVerticalFov } from '../model/cameraMath.ts'
 import { IPHONE_11_PRO_PHOTO_REFERENCE } from './photoReference.ts'
+import { HOUSE_REFERENCE } from './houseReference.ts'
 
 const referenceAspectRatio = IPHONE_11_PRO_PHOTO_REFERENCE.rotatedWidthPx
   / IPHONE_11_PRO_PHOTO_REFERENCE.rotatedHeightPx
@@ -8,8 +9,8 @@ const referenceAspectRatio = IPHONE_11_PRO_PHOTO_REFERENCE.rotatedWidthPx
 export const DEFAULT_CONFIG: AppConfig = {
   version: 1,
   house: {
-    width: 9,
-    depth: 9,
+    width: HOUSE_REFERENCE.masonryWidthM,
+    depth: HOUSE_REFERENCE.masonryDepthM,
     eavesHeight: 5,
     roofPitchDeg: 30,
     eaveOverhang: 0.35,

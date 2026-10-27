@@ -8,6 +8,7 @@ import { cameraControls, derivedText, getPath, houseControls, setPath, type Nume
 import { calibrationLandmarks, optimizeCamera } from './model/calibration.ts'
 import { loadLastPhoto, saveLastPhoto } from './config/photoStore.ts'
 import { IPHONE_11_PRO_PHOTO_REFERENCE } from './config/photoReference.ts'
+import { HOUSE_REFERENCE } from './config/houseReference.ts'
 
 const STORAGE_KEY = 'pv-shadowlab-config-v1'
 const CALIBRATION_VIEW_KEY = 'pv-shadowlab-calibration-view-v1'
@@ -96,7 +97,17 @@ function element<T extends HTMLElement>(id: string): T {
 function loadSavedConfig(): AppConfig {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (!saved) return cloneDefaultConfig()
-  try { return importConfig(saved) } catch { return cloneDefaultConfig() }
+  try {
+    const loaded=importConfig(saved)
+    // Einmalige Migration der unveränderten früheren 9-m-Startwerte auf das
+    // inzwischen bestätigte Rohbaumaß. Individuelle Maße bleiben unangetastet.
+    if(loaded.house.width===9 && loaded.house.depth===9){
+      loaded.house.width=HOUSE_REFERENCE.masonryWidthM
+      loaded.house.depth=HOUSE_REFERENCE.masonryDepthM
+      localStorage.setItem(STORAGE_KEY,exportConfig(loaded))
+    }
+    return loaded
+  } catch { return cloneDefaultConfig() }
 }
 
 function persist(): void {
