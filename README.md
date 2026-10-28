@@ -24,6 +24,7 @@ Vite zeigt danach die lokale URL an. Weitere Prüfungen:
 - Das zuletzt ausgewählte Originalfoto wird ausschließlich lokal in IndexedDB gespeichert und beim nächsten Start automatisch wiederhergestellt, bis ein anderes Foto gewählt wird. Bei einem neuen Foto setzt die Anwendung 90° CCW, das tatsächliche Seitenverhältnis und den aus 26 mm abgeleiteten FOV automatisch; beim Neuladen bleiben spätere manuelle Kalibrierwerte erhalten.
 - Die 3D-Deckkraft und die Darstellung von Foto, Modell oder Überlagerung sind umschaltbar.
 - Haus- und Kamerakonfiguration können als JSON exportiert/importiert werden. Die letzte gültige Konfiguration bleibt zusätzlich im localStorage des Browsers erhalten. Das Foto selbst wird weder gespeichert noch hochgeladen.
+- Sämtliche Kalibrierungsmarkierungen lassen sich gemeinsam ein- und ausblenden; diese Ansichtseinstellung wird mit der Konfiguration gespeichert.
 - In der Punktkalibrierung werden bekannte Modellpunkte ausgewählt und im Foto angeklickt. Die äußeren Dachecken enthalten Trauf- und Giebelüberstand und entsprechen damit den gut sichtbaren äußersten Dachpunkten. Ein Präzisionskreuz, stufenloser Mausrad-Zoom von 100 bis 1200 Prozent und Verschieben per Ziehen erleichtern die Auswahl. Eine Ziehbewegung setzt keinen Punkt. Ab vier Beobachtungen optimiert die Anwendung Position, Azimut, Elevation und Roll der Fotokamera; der optische FOV bleibt dabei bewusst fixiert.
 - Kalibrierpunkte werden automatisch gespeichert und sind Teil des JSON-Imports und -Exports. Zoom und Bildverschiebung werden als lokale Arbeitsansicht wiederhergestellt, aber nicht in die geometrische JSON-Konfiguration aufgenommen.
 
@@ -72,12 +73,32 @@ Für die geometrische Kalibrierung werden insbesondere das tatsächlich dargeste
 
 ## Bekannte Gebäudemaße
 
-- Bestätigtes Rohmauerwerk: 8,99 × 8,99 m
-- Mögliche Putzstärke: ungefähr 3–5 cm je Seite, noch nicht bestätigt
-- Daraus mögliches fertiges Außenmaß: ungefähr 9,05–9,09 m
-- Dachneigung: vermutlich 30–35°, noch zu messen
+- Gebäudebreite und -tiefe: 9,10 × 9,10 m
+- Dokumentiertes Rohmauerwerk: 8,99 × 8,99 m
+- Dachneigung: 30°
+- Gemessener Traufüberstand: 0,90 m
+- Dachlänge in Z-Richtung: 10,73 m
+- Länge der geneigten Dachfläche: 6,29 m
+- Daraus abgeleiteter Giebelüberstand je Seite: (10,73 − 9,10) / 2 = 0,815 m
 
-Bis das fertige Fassadenmaß gemessen ist, verwendet das Modell 8,99 m für Breite und Tiefe. Die unsichere Putzstärke wird nicht als vermeintlich exakter Geometriewert eingerechnet.
+Die Werte sind als Modell-Defaults hinterlegt. Die schräge Dachlänge aus Geometrie und Rundungswerten beträgt (9,10 / 2 + 0,90) / cos(30°) ≈ 6,293 m und stimmt damit mit der dokumentierten Länge von 6,29 m überein.
+
+### Störflächen auf dem Ost-Dach
+
+Der Ursprung liegt links unten an der Traufe. Die Plan-X-Koordinate läuft entlang der 10,73 m langen Dachkante von Modell-Z− nach Z+. Plan-Y läuft auf der 6,29 m langen geneigten Fläche von der Traufe zum First. Die dokumentierten Z = 100 mm werden bewusst ignoriert; die Störflächen liegen direkt in der Dachebene.
+
+- Störfläche 01: Kamin, X 3,217–4,263 m, Y 3,438–5,077 m
+- Störfläche 03: Fenster Bad, X 4,641–5,189 m, Y 3,878–4,819 m
+- Störfläche 04: Fenster Südzimmer, X 8,015–8,852 m, Y 3,554–4,630 m
+
+Die frühere Störfläche 02 „Lüftung“ (X 4,526–4,680 m, Y 1,782–1,994 m) wurde überbaut und wird daher nicht mehr im aktiven Modell dargestellt. Auch beim Import älterer Konfigurationen wird sie entfernt.
+Die Beschriftung der Störflächen ist standardmäßig ausgeblendet und kann im Bereich „Gebäude & Dach“ eingeschaltet werden. Eingeschaltete Beschriftungen liegen als Texturen in der Dachfläche und folgen daher der perspektivischen Projektion.
+
+Die Störflächenkalibrierung verwendet zunächst die vier sichtbaren Ecken des Bad-Fensters. Sie optimiert gemeinsamen Versatz und Maßstab des PV-Planrasters entlang der Dachkante und Dachschräge. Das Ergebnis wird auf alle Störflächen angewendet, automatisch gespeichert und mit der JSON-Konfiguration exportiert. Beim Wechsel des Fotos bleiben die ermittelten Rasterparameter erhalten; nur die bildabhängigen Klickpunkte werden gelöscht.
+Mit dem Schalter „Gespeicherte Störflächenkalibrierung verwenden“ kann jederzeit zwischen den unveränderten PV-Planwerten und der kalibrierten Darstellung verglichen werden, ohne die gespeicherten Korrekturwerte zu löschen.
+
+Der Kamin wird als vertikaler 3D-Körper mit waagerechter Oberkante und vier unterschiedlich gefärbten Seitenflächen dargestellt. Für die Fotokalibrierung wird nur seine sichtbare Front verwendet: unten links/rechts am Dachdurchtritt und direkt darüber oben links/rechts an der Kaminöffnung. Die im Foto nicht sichtbare Tiefe stammt weiterhin aus der dokumentierten Grundfläche. Seine Höhe kann numerisch eingegeben oder aus mindestens einer oberen Kaminecke optimiert werden. Höhe und Kalibrierung werden ebenfalls automatisch und im JSON gespeichert.
+Störflächen und Kamin werden transparent über das Referenzfoto gelegt. Ihre Deckkraft folgt der allgemeinen Modelldeckkraft mit einem zusätzlichen Transparenzfaktor, damit die darunterliegenden Bilddetails sichtbar bleiben.
 
 ## Struktur
 

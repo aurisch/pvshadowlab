@@ -1,7 +1,8 @@
 import { describe,expect,it } from 'vitest'
-import { calibrationLandmarks,optimizeCamera,projectPoint } from '../src/model/calibration.ts'
+import { calibrationLandmarks,optimizeCamera,optimizeChimneyHeight,optimizeObstructionCalibration,projectPoint } from '../src/model/calibration.ts'
 import { DEFAULT_CONFIG } from '../src/config/defaults.ts'
 import * as THREE from 'three'
+import { calculateObstructionCorners } from '../src/model/geometry.ts'
 
 describe('Punktkalibrierung',()=>{
   it('rekonstruiert eine Kamerapose aus Modellpunkten',()=>{
@@ -28,5 +29,26 @@ describe('Punktkalibrierung',()=>{
     const actual=projectPoint(point,orientation,camera)!
     expect(actual.x).toBeCloseTo(expected.x,8)
     expect(actual.y).toBeCloseTo(expected.y,8)
+  })
+
+  it('rekonstruiert Versatz und Maßstab des PV-Planrasters',()=>{
+    const obstruction=DEFAULT_CONFIG.roofObstructions.find(o=>o.id==='east-03')!
+    const target={alongOffset:.32,slopeOffset:-.18,alongScale:1.04,slopeScale:.96,observations:[],chimneyHeight:1.5,chimneyObservations:[]}
+    const corners=calculateObstructionCorners(DEFAULT_CONFIG.house,obstruction,target)
+    const names=['lower-left','lower-right','upper-right','upper-left'] as const
+    const observations=names.map((corner,index)=>({corner,...projectPoint(corners[index]!,DEFAULT_CONFIG.house.orientationDeg,DEFAULT_CONFIG.photoCamera)!}))
+    const result=optimizeObstructionCalibration(DEFAULT_CONFIG.house,DEFAULT_CONFIG.photoCamera,obstruction,DEFAULT_CONFIG.roofObstructionCalibration,observations)
+    expect(result.rmsNormalized).toBeLessThan(.002)
+  })
+
+  it('rekonstruiert die Kaminhöhe aus oberen Eckpunkten',()=>{
+    const chimney=DEFAULT_CONFIG.roofObstructions.find(o=>o.id==='east-01')!
+    const calibration={...DEFAULT_CONFIG.roofObstructionCalibration,chimneyHeight:2.2}
+    const base=calculateObstructionCorners(DEFAULT_CONFIG.house,chimney,calibration)
+    const roofTop=Math.max(...base.map(point=>point.y))
+    const names=['upper-left','upper-right'] as const
+    const observations=names.map((corner,index)=>({corner,...projectPoint({x:base[index]!.x,y:roofTop+2.2,z:base[index]!.z},DEFAULT_CONFIG.house.orientationDeg,DEFAULT_CONFIG.photoCamera)!}))
+    const result=optimizeChimneyHeight(DEFAULT_CONFIG.house,DEFAULT_CONFIG.photoCamera,chimney,DEFAULT_CONFIG.roofObstructionCalibration,observations)
+    expect(result.height).toBeCloseTo(2.2,2)
   })
 })

@@ -1,4 +1,4 @@
-import type { HouseParameters } from './types.ts'
+import type { HouseParameters, RoofObstruction, RoofObstructionCalibration } from './types.ts'
 
 export interface Point3 { x: number; y: number; z: number }
 
@@ -58,4 +58,22 @@ export function validateHouseParameters(p: HouseParameters): string[] {
   if (p.roofPitchDeg <= 0 || p.roofPitchDeg >= 80) errors.push('Die Dachneigung muss zwischen 0° und 80° liegen.')
   if (p.eaveOverhang < 0 || p.gableOverhang < 0) errors.push('Dachüberstände dürfen nicht negativ sein.')
   return errors
+}
+
+export function calculateObstructionCorners(p:HouseParameters,o:RoofObstruction,calibration:RoofObstructionCalibration={alongOffset:0,slopeOffset:0,alongScale:1,slopeScale:1,observations:[],chimneyHeight:1.5,chimneyObservations:[]}):[Point3,Point3,Point3,Point3]{
+  const pitch=rad(p.roofPitchDeg)
+  const roofHalfWidth=p.width/2+p.eaveOverhang
+  const roofHalfDepth=p.depth/2+p.gableOverhang
+  const eaveY=p.eavesHeight-p.eaveOverhang*Math.tan(pitch)
+  const point=(rawAlong:number,rawSlope:number):Point3=>{
+    const along=calibration.alongOffset+rawAlong*calibration.alongScale
+    const slope=calibration.slopeOffset+rawSlope*calibration.slopeScale
+    return ({
+    // The photographed east roof is the model's X− roof plane.
+    x:-roofHalfWidth+slope*Math.cos(pitch)-o.normalOffset*Math.sin(pitch),
+    y:eaveY+slope*Math.sin(pitch)+o.normalOffset*Math.cos(pitch),
+    z:-roofHalfDepth+along,
+    })
+  }
+  return [point(o.alongMin,o.slopeMin),point(o.alongMax,o.slopeMin),point(o.alongMax,o.slopeMax),point(o.alongMin,o.slopeMax)]
 }

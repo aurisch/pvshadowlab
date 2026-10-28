@@ -2,19 +2,21 @@ import type { AppConfig } from '../model/types.ts'
 import { focalLength35ToVerticalFov } from '../model/cameraMath.ts'
 import { IPHONE_11_PRO_PHOTO_REFERENCE } from './photoReference.ts'
 import { HOUSE_REFERENCE } from './houseReference.ts'
+import { EAST_ROOF_OBSTRUCTIONS } from './roofObstructions.ts'
 
 const referenceAspectRatio = IPHONE_11_PRO_PHOTO_REFERENCE.rotatedWidthPx
   / IPHONE_11_PRO_PHOTO_REFERENCE.rotatedHeightPx
 
 export const DEFAULT_CONFIG: AppConfig = {
   version: 1,
+  houseReferenceRevision: HOUSE_REFERENCE.revision,
   house: {
-    width: HOUSE_REFERENCE.masonryWidthM,
-    depth: HOUSE_REFERENCE.masonryDepthM,
+    width: HOUSE_REFERENCE.buildingWidthM,
+    depth: HOUSE_REFERENCE.buildingDepthM,
     eavesHeight: 5,
-    roofPitchDeg: 30,
-    eaveOverhang: 0.35,
-    gableOverhang: 0.35,
+    roofPitchDeg: HOUSE_REFERENCE.roofPitchDeg,
+    eaveOverhang: HOUSE_REFERENCE.eaveOverhangM,
+    gableOverhang: HOUSE_REFERENCE.gableOverhangM,
     orientationDeg: 0,
   },
   photoCamera: {
@@ -35,6 +37,11 @@ export const DEFAULT_CONFIG: AppConfig = {
   modelOpacity: 0.72,
   photoRotationDeg: IPHONE_11_PRO_PHOTO_REFERENCE.requiredRotationDeg,
   calibrationObservations: [],
+  showCalibrationMarkers: true,
+  roofObstructions: structuredClone(EAST_ROOF_OBSTRUCTIONS),
+  showObstructionLabels: false,
+  roofObstructionCalibration: {alongOffset:0,slopeOffset:0,alongScale:1,slopeScale:1,observations:[],chimneyHeight:1.5,chimneyObservations:[]},
+  useRoofObstructionCalibration: false,
   lensDistortion: null,
 }
 

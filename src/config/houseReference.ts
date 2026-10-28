@@ -1,14 +1,12 @@
 export const HOUSE_REFERENCE = {
-  masonryWidthM: 8.99,
-  masonryDepthM: 8.99,
-  plasterPerSideM: {
-    minimum: 0.03,
-    maximum: 0.05,
-    confirmed: false,
-  },
-  roofPitchDeg: {
-    minimum: 30,
-    maximum: 35,
-    confirmed: false,
-  },
+  revision: 2,
+  documentedMasonryWidthM: 8.99,
+  documentedMasonryDepthM: 8.99,
+  buildingWidthM: 9.10,
+  buildingDepthM: 9.10,
+  roofPitchDeg: 30,
+  eaveOverhangM: 0.90,
+  roofLengthZM: 10.73,
+  roofSlopeLengthM: 6.29,
+  gableOverhangM: (10.73 - 9.10) / 2,
 } as const

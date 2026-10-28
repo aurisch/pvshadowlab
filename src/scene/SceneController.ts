@@ -44,7 +44,7 @@ export class SceneController {
 
   update(config: AppConfig): void {
     this.config = config
-    this.house.update(config.house)
+    this.house.update(config.house, config.roofObstructions, config.showObstructionLabels, config.roofObstructionCalibration, config.useRoofObstructionCalibration)
     this.house.setOpacity(config.modelOpacity)
     this.applyPhotoCamera(config.photoCamera)
     this.controls.enabled = config.cameraMode === 'free'

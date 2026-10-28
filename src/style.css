@@ -26,6 +26,7 @@ select { color: #e7edf1; background:#151b20; border:1px solid #505c66; border-ra
 .number-wrap { position: relative; }
 .number-wrap i, .single-input i { position: absolute; right: 6px; top: 5px; color: #87949e; font-style: normal; pointer-events: none; }
 .derived, .hint, .status { color: #9daab4; font-size: 11px; line-height: 1.45; }
+.check-row { display:flex; align-items:center; gap:7px; margin:8px 0; font-size:12px; color:#c7d0d6; }
 .single-input { display: flex; justify-content: space-between; align-items: center; margin-top: 9px; font-size: 12px; }
 .zoom-control { display:grid; grid-template-columns:116px 1fr 48px; align-items:center; gap:7px; margin-top:9px; font-size:12px; }
 .zoom-control output { text-align:right; color:#aeb8bf; font-variant-numeric:tabular-nums; }
@@ -69,5 +70,9 @@ select { color: #e7edf1; background:#151b20; border:1px solid #505c66; border-ra
 .calibration-marker::before,.calibration-marker::after { content:""; position:absolute; background:#ff3b30; }
 .calibration-marker::before { left:5px; top:-5px; width:1px; height:20px; }
 .calibration-marker::after { left:-5px; top:5px; width:20px; height:1px; }
+.calibration-marker.obstruction-marker { border-color:#ffd43b;box-shadow:0 0 0 1px #182026; }
+.calibration-marker.obstruction-marker::before,.calibration-marker.obstruction-marker::after { background:#ffd43b; }
+.calibration-marker.chimney-marker { border-color:#c77dff;box-shadow:0 0 0 1px #182026; }
+.calibration-marker.chimney-marker::before,.calibration-marker.chimney-marker::after { background:#c77dff; }
 .axis-note { position: absolute; right: 16px; bottom: 9px; color: #84919a; font-size: 10px; }
 input:disabled { opacity: .45; cursor: not-allowed; }

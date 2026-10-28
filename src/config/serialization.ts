@@ -1,5 +1,6 @@
 import type { AppConfig } from '../model/types.ts'
 import { validateHouseParameters } from '../model/geometry.ts'
+import { EAST_ROOF_OBSTRUCTIONS } from './roofObstructions.ts'
 
 export function exportConfig(config: AppConfig): string {
   return JSON.stringify(config, null, 2)
@@ -23,8 +24,11 @@ export function importConfig(json: string): AppConfig {
       && typeof observation.y === 'number' && Number.isFinite(observation.y),
     ).map(({ landmarkId, x, y }) => ({ landmarkId, x, y }))
     : []
+  const roofCalibration=candidate.roofObstructionCalibration
+  const validRoofNumber=(value:unknown,fallback:number)=>typeof value==='number'&&Number.isFinite(value)?value:fallback
   return {
     version: 1,
+    houseReferenceRevision: typeof candidate.houseReferenceRevision === 'number' ? candidate.houseReferenceRevision : 0,
     house: { ...candidate.house },
     photoCamera: { ...c },
     cameraMode: candidate.cameraMode === 'photo' ? 'photo' : 'free',
@@ -34,6 +38,26 @@ export function importConfig(json: string): AppConfig {
       ? candidate.photoRotationDeg
       : 90,
     calibrationObservations,
+    showCalibrationMarkers: candidate.showCalibrationMarkers !== false,
+    roofObstructions: Array.isArray(candidate.roofObstructions)
+      ? structuredClone(candidate.roofObstructions).filter((obstruction) => obstruction.id !== 'east-02')
+        .map((obstruction) => ({ ...obstruction, normalOffset: 0 }))
+      : structuredClone(EAST_ROOF_OBSTRUCTIONS),
+    showObstructionLabels: candidate.showObstructionLabels === true,
+    roofObstructionCalibration:{
+      alongOffset:validRoofNumber(roofCalibration?.alongOffset,0),
+      slopeOffset:validRoofNumber(roofCalibration?.slopeOffset,0),
+      alongScale:validRoofNumber(roofCalibration?.alongScale,1),
+      slopeScale:validRoofNumber(roofCalibration?.slopeScale,1),
+      observations:Array.isArray(roofCalibration?.observations)
+        ? roofCalibration.observations.filter(o=>o&&['lower-left','lower-right','upper-right','upper-left'].includes(o.corner)&&Number.isFinite(o.x)&&Number.isFinite(o.y))
+        : [],
+      chimneyHeight:validRoofNumber(roofCalibration?.chimneyHeight,1.5),
+      chimneyObservations:Array.isArray(roofCalibration?.chimneyObservations)
+        ? roofCalibration.chimneyObservations.filter(o=>o&&['lower-left','lower-right','upper-right','upper-left'].includes(o.corner)&&Number.isFinite(o.x)&&Number.isFinite(o.y))
+        : [],
+    },
+    useRoofObstructionCalibration:candidate.useRoofObstructionCalibration===true,
     lensDistortion: null,
   }
 }

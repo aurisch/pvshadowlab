@@ -1,5 +1,5 @@
-import type { CalibrationObservation, HouseParameters, PhotoCameraParameters } from './types.ts'
-import { calculateHouseGeometry, type Point3 } from './geometry.ts'
+import type { CalibrationObservation, HouseParameters, ObstructionCalibrationObservation, PhotoCameraParameters, RoofObstruction, RoofObstructionCalibration } from './types.ts'
+import { calculateHouseGeometry, calculateObstructionCorners, type Point3 } from './geometry.ts'
 
 export interface CalibrationLandmark { id: string; label: string; point: Point3 }
 export type { CalibrationObservation } from './types.ts'
@@ -61,4 +61,56 @@ export function optimizeCamera(house: HouseParameters, initial: PhotoCameraParam
     if(Math.max(...steps)<0.0005) break
   }
   return {camera:best,rmsNormalized:Math.sqrt(bestScore)}
+}
+
+export function optimizeObstructionCalibration(house:HouseParameters,camera:PhotoCameraParameters,obstruction:RoofObstruction,initial:RoofObstructionCalibration,observations:ObstructionCalibrationObservation[]):{calibration:RoofObstructionCalibration;rmsNormalized:number}{
+  const indices={ 'lower-left':0,'lower-right':1,'upper-right':2,'upper-left':3 } as const
+  const score=(candidate:RoofObstructionCalibration):number=>{
+    const corners=calculateObstructionCorners(house,obstruction,candidate)
+    let sum=0
+    for(const observation of observations){
+      const projected=projectPoint(corners[indices[observation.corner]],house.orientationDeg,camera)
+      if(!projected)return 1e9
+      sum+=(projected.x-observation.x)**2+(projected.y-observation.y)**2
+    }
+    return sum/observations.length
+  }
+  let best={...initial,observations:[...observations]},bestScore=score(best)
+  const keys=(['alongOffset','slopeOffset','alongScale','slopeScale'] as const)
+  let steps=[.5,.5,.08,.08]
+  for(let pass=0;pass<240;pass++){
+    let improved=false
+    keys.forEach((key,index)=>{for(const sign of [-1,1]){const candidate={...best,[key]:best[key]+sign*(steps[index]??0)};if(candidate.alongScale<=.2||candidate.slopeScale<=.2)continue;const value=score(candidate);if(value<bestScore){best=candidate;bestScore=value;improved=true}}})
+    if(!improved)steps=steps.map(step=>step*.62)
+    if(Math.max(...steps)<.00005)break
+  }
+  return {calibration:best,rmsNormalized:Math.sqrt(bestScore)}
+}
+
+export function optimizeChimneyHeight(house:HouseParameters,camera:PhotoCameraParameters,chimney:RoofObstruction,calibration:RoofObstructionCalibration,observations:ObstructionCalibrationObservation[]):{height:number;rmsNormalized:number}{
+  const base=calculateObstructionCorners(house,chimney,calibration)
+  const roofTop=Math.max(...base.map(point=>point.y))
+  const score=(height:number):number=>{
+    let sum=0
+    for(const observation of observations){
+      const isLeft=observation.corner==='lower-left'||observation.corner==='upper-left'
+      const isTop=observation.corner==='upper-left'||observation.corner==='upper-right'
+      const source=base[isLeft?0:1]
+      const projected=projectPoint(
+        isTop?{x:source.x,y:roofTop+height,z:source.z}:source,
+        house.orientationDeg,camera,
+      )
+      if(!projected)return 1e9
+      sum+=(projected.x-observation.x)**2+(projected.y-observation.y)**2
+    }
+    return sum/observations.length
+  }
+  let height=calibration.chimneyHeight,best=score(height),step=.5
+  for(let pass=0;pass<100;pass++){
+    let improved=false
+    for(const sign of [-1,1]){const candidate=Math.max(.05,height+sign*step),value=score(candidate);if(value<best){height=candidate;best=value;improved=true}}
+    if(!improved)step*=.55
+    if(step<.0001)break
+  }
+  return {height,rmsNormalized:Math.sqrt(best)}
 }
