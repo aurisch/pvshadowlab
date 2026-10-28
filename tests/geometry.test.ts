@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateHouseGeometry, calculateObstructionCorners, calculateRidgeRise } from '../src/model/geometry.ts'
+import { calculateHouseGeometry, calculateObstructionCorners, calculateChimney, calculateRidgeRise } from '../src/model/geometry.ts'
 import { DEFAULT_CONFIG } from '../src/config/defaults.ts'
 import { EAST_ROOF_OBSTRUCTIONS } from '../src/config/roofObstructions.ts'
 
@@ -30,5 +30,27 @@ describe('Hausgeometrie', () => {
     expect(corners[1].z-corners[0].z).toBeCloseTo(1.046)
     const slopeLength=Math.hypot(corners[3].x-corners[0].x,corners[3].y-corners[0].y)
     expect(slopeLength).toBeCloseTo(1.639)
+  })
+
+  it('wendet lokale PV-Korrekturen genau einmal und in definierter Reihenfolge an',()=>{
+    const obstruction=EAST_ROOF_OBSTRUCTIONS.find(o=>o.id==='east-04')!,identity=calculateObstructionCorners(DEFAULT_CONFIG.house,obstruction)
+    const corrected=calculateObstructionCorners(DEFAULT_CONFIG.house,obstruction,{alongOffset:.2,slopeOffset:-.1,alongScale:1.05,slopeScale:.95})
+    const pitch=DEFAULT_CONFIG.house.roofPitchDeg*Math.PI/180
+    expect(corrected[0]!.z-identity[0]!.z).toBeCloseTo(.2+obstruction.alongMin*.05,10)
+    expect(corrected[0]!.x-identity[0]!.x).toBeCloseTo((-.1+obstruction.slopeMin*-.05)*Math.cos(pitch),10)
+    expect(corrected[0]!.y-identity[0]!.y).toBeCloseTo((-.1+obstruction.slopeMin*-.05)*Math.sin(pitch),10)
+  })
+
+  it('hält Fenster und Kaminanschluss in der Dachfläche, Oberkante waagerecht',()=>{
+    const house=DEFAULT_CONFIG.house,t=Math.tan(house.roofPitchDeg*Math.PI/180)
+    for(const obstruction of EAST_ROOF_OBSTRUCTIONS){
+      const {base,top}=calculateChimney(house,obstruction,10)
+      for(let i=0;i<4;i++){
+        expect(base[i]!.y).toBeCloseTo(house.eavesHeight+(base[i]!.x+house.width/2)*t,10)
+        expect(top[i]!.y).toBe(10)
+        expect(top[i]!.x).toBe(base[i]!.x);expect(top[i]!.z).toBe(base[i]!.z)
+      }
+      expect(base[0].y).not.toBe(base[3].y)
+    }
   })
 })

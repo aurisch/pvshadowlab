@@ -3,12 +3,15 @@ import { SceneController } from './scene/SceneController.ts'
 import { cloneDefaultConfig } from './config/defaults.ts'
 import { exportConfig, importConfig } from './config/serialization.ts'
 import { focalLength35ToVerticalFov, verticalFovToFocalLength35 } from './model/cameraMath.ts'
-import type { AppConfig, CalibrationObservation, CameraMode, ObstructionCorner, OverlayMode } from './model/types.ts'
+import type { AppConfig, CameraMode, OverlayMode } from './model/types.ts'
 import { cameraControls, derivedText, getPath, houseControls, setPath, type NumericControlSpec } from './ui/controls.ts'
-import { calibrationLandmarks, optimizeCamera, optimizeChimneyHeight, optimizeObstructionCalibration } from './model/calibration.ts'
+import { referencePoints } from './model/calibration.ts'
+import { calibrationDiagnostics, optimizeJoint, type JointResult } from './model/jointCalibration.ts'
+import { getParameter, parameterSpecs, setParameter } from './model/parameters.ts'
+import { IDENTITY_CORRECTION } from './model/geometry.ts'
+import { DroneWorkspace } from './ui/DroneWorkspace.ts'
 import { loadLastPhoto, saveLastPhoto } from './config/photoStore.ts'
-import { IPHONE_11_PRO_PHOTO_REFERENCE } from './config/photoReference.ts'
-import { HOUSE_REFERENCE } from './config/houseReference.ts'
+import { rotateCalibration } from './model/photoTransform.ts'
 
 const STORAGE_KEY = 'pv-shadowlab-config-v1'
 const CALIBRATION_VIEW_KEY = 'pv-shadowlab-calibration-view-v1'
@@ -16,10 +19,8 @@ let config = loadSavedConfig()
 let photoUrl: string | null = null
 let sourcePhoto: HTMLImageElement | null = null
 let sourcePhotoName = ''
-let calibrationObservations: CalibrationObservation[] = [...config.calibrationObservations]
 let calibrationActive = false
-let obstructionCaptureCorner:ObstructionCorner|null=null
-let chimneyCaptureCorner:ObstructionCorner|null=null
+let lastResult:JointResult|null=null
 let calibrationZoom = 1
 let panStart: { x:number; y:number; left:number; top:number } | null = null
 let suppressCalibrationClick = false
@@ -29,10 +30,11 @@ const app = document.querySelector<HTMLDivElement>('#app')!
 app.innerHTML = `
   <header class="topbar">
     <button id="toggle-panel" class="icon-button" aria-label="Parameterbereich ein- oder ausblenden">☰</button>
-    <div><h1>PV ShadowLab</h1><span>Phase 1 · Hausmodell & Kamerakalibrierung</span></div>
+    <div><h1>PV ShadowLab</h1><span>Phase 2 · Gemeinsame geometrische Kalibrierung</span></div>
     <div class="mode-switch" role="group" aria-label="Kameramodus">
       <button data-camera-mode="free">Freie Ansicht</button>
       <button data-camera-mode="photo">Fotokamera</button>
+      <button id="drone-mode">Dachvermessung</button>
     </div>
   </header>
   <main>
@@ -60,31 +62,26 @@ app.innerHTML = `
         <label class="slider-row"><span>Modelldeckkraft</span><input id="opacity" type="range" min="0" max="1" step="0.01"><output id="opacity-value"></output></label>
         <p id="photo-info" class="hint">Kein Foto geladen. Die Datei bleibt ausschließlich lokal.</p>
       </details>
-      <details><summary>Punktkalibrierung</summary>
+      <details open><summary>Kalibrierung</summary>
         <label class="check-row"><input id="show-calibration-markers" type="checkbox"> Alle Kalibrierungspunkte anzeigen</label>
-        <label class="single-input"><span>Modellpunkt</span><select id="landmark-select"></select></label>
+        <label class="single-input"><span>Modellobjekt</span><select id="object-select"></select></label>
+        <label class="single-input"><span>Eckpunkt</span><select id="landmark-select"></select></label>
+        <p class="hint">Fenster: unten = Traufe, oben = First. Kamin: Dachanschluss und Öffnung getrennt. Ein vorhandener Punkt kann erneut gesetzt werden.</p>
         <label class="zoom-control"><span>Bildvergrößerung</span><input id="calibration-zoom" type="range" min="1" max="12" step="0.25" value="1"><output id="calibration-zoom-value">100 %</output></label>
-        <button id="capture-point" class="calibration-button">Punkt im Foto setzen</button>
+        <button id="capture-point" class="calibration-button">Punkt im Foto setzen / korrigieren</button>
+        <button id="solve-calibration" class="calibration-button">Kalibrierung berechnen</button>
+        <p id="calibration-status" class="hint" role="status"></p>
+        <p class="hint">Kreise = Messpunkte · cyanfarbene Kreuze = Modellprojektion · Linien = Restfehler. Fehler in Originalbild-Pixeln; Klick auf Messpunkt zum Korrigieren.</p>
         <div id="calibration-list" class="calibration-list"></div>
-        <div class="button-grid"><button id="solve-camera">Kamera berechnen</button><button id="clear-points">Punkte löschen</button></div>
-        <p id="calibration-status" class="hint">Mindestens vier gut verteilte Punkte setzen; sechs oder mehr sind besser.</p>
-      </details>
-      <details><summary>Störflächen kalibrieren</summary>
-        <label class="check-row"><input id="use-obstruction-calibration" type="checkbox"> Gespeicherte Störflächenkalibrierung verwenden</label>
-        <p class="hint">Bad-Fenster: vier Ecken im Foto zuordnen. „Unten“ bedeutet Traufseite, „oben“ Firstseite.</p>
-        <label class="single-input"><span>Fensterecke</span><select id="obstruction-corner"><option value="lower-left">unten links</option><option value="lower-right">unten rechts</option><option value="upper-right">oben rechts</option><option value="upper-left">oben links</option></select></label>
-        <button id="capture-obstruction-point" class="calibration-button">Fensterecke im Foto setzen</button>
-        <div id="obstruction-calibration-list" class="calibration-list"></div>
-        <div class="button-grid"><button id="solve-obstructions">Störflächen berechnen</button><button id="reset-obstructions">Kalibrierung zurücksetzen</button></div>
-        <p id="obstruction-calibration-status" class="hint"></p>
-        <hr>
-        <label class="single-input"><span>Kaminhöhe</span><span><input id="chimney-height" type="number" min="0.05" max="10" step="0.01"><i>m</i></span></label>
-        <p class="hint">Sichtbare Kaminfront: unten links/rechts am Dach, dann direkt darüber oben links/rechts an der Kaminöffnung. Die Tiefe muss nicht angeklickt werden.</p>
-        <label class="single-input"><span>Kaminecke</span><select id="chimney-corner"><option value="lower-left">unten links am Dach</option><option value="lower-right">unten rechts am Dach</option><option value="upper-left">oben links Öffnung</option><option value="upper-right">oben rechts Öffnung</option></select></label>
-        <button id="capture-chimney-point" class="calibration-button">Kaminecke setzen</button>
-        <div id="chimney-calibration-list" class="calibration-list"></div>
-        <button id="solve-chimney">Kaminhöhe berechnen</button>
-        <p id="chimney-calibration-status" class="hint"></p>
+        <details><summary>Experten: Parameter & Referenzen</summary>
+          <p class="hint">Haken gibt einen Parameter frei. Ohne Haken bleibt der Wert fest. Nur begründet weitere Parameter freigeben. Gebäude 9,10 × 9,10 m (Rohbau 8,99 m); Dachneigung 30°, Überstände 0,90 / 0,815 m. Firstlänge und Dachschräge werden daraus abgeleitet.</p>
+          <p class="hint">Bildwinkel startet bei 26 mm Kleinbildäquivalent, diagonal auf das gedrehte Bildformat umgerechnet. EXIF wird vom Browser berücksichtigt. Cropping ist unbekannt; keine Verzeichnungskorrektur. Bildmittelpunkt X/Y in normierten Bildkoordinaten (rechts/oben positiv).</p>
+          <label class="single-input"><span>Robuste Schwelle (px)</span><input id="robust-threshold" type="number" min="0.5" max="100" step="0.5"></label>
+          <div id="parameter-controls"></div>
+          <div id="reference-deviations" class="hint"></div>
+          <div id="migration-notes" class="hint"></div>
+          <button id="export-legacy">Phase-1-Original exportieren</button>
+        </details>
       </details>
       <details><summary>Konfiguration</summary>
         <div class="button-grid"><button id="export-config">JSON exportieren</button><label class="file-button">JSON importieren<input id="import-config" type="file" accept="application/json,.json"></label></div>
@@ -102,6 +99,7 @@ app.innerHTML = `
       </div>
       <div class="axis-note">X Breite · Y Höhe · Z Tiefe · Einheit Meter</div>
     </section>
+    <section id="drone-workspace" hidden></section>
   </main>`
 
 const viewport = element<HTMLDivElement>('viewport')
@@ -109,6 +107,7 @@ const stage = element<HTMLDivElement>('stage')
 const referencePhoto = element<HTMLImageElement>('reference-photo')
 const scene = new SceneController(viewport, config)
 const landmarkSelect = element<HTMLSelectElement>('landmark-select')
+let droneWorkspace:DroneWorkspace|null=null
 
 function element<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id)
@@ -120,20 +119,16 @@ function loadSavedConfig(): AppConfig {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (!saved) return cloneDefaultConfig()
   try {
+    const raw=JSON.parse(saved) as {version?:number}
+    if(raw.version===1&&!localStorage.getItem('pv-shadowlab-before-phase2'))localStorage.setItem('pv-shadowlab-before-phase2',saved)
     const loaded=importConfig(saved)
-    // Einmalige Übernahme der inzwischen gemessenen Referenzgeometrie. Kamera,
-    // Kalibrierpunkte und alle nicht bestätigten Hausparameter bleiben erhalten.
-    if(loaded.houseReferenceRevision<HOUSE_REFERENCE.revision){
-      loaded.house.width=HOUSE_REFERENCE.buildingWidthM
-      loaded.house.depth=HOUSE_REFERENCE.buildingDepthM
-      loaded.house.roofPitchDeg=HOUSE_REFERENCE.roofPitchDeg
-      loaded.house.eaveOverhang=HOUSE_REFERENCE.eaveOverhangM
-      loaded.house.gableOverhang=HOUSE_REFERENCE.gableOverhangM
-      loaded.houseReferenceRevision=HOUSE_REFERENCE.revision
-      localStorage.setItem(STORAGE_KEY,exportConfig(loaded))
-    }
     return loaded
-  } catch { return cloneDefaultConfig() }
+  } catch {
+    const fallback=cloneDefaultConfig()
+    fallback.calibration.legacyConfig=saved
+    fallback.calibration.migrationNotes.push('Gespeicherte Konfiguration konnte nicht sicher gelesen werden. Unverändertes Original ist über den Original-Export verfügbar; Import bitte prüfen.')
+    return fallback
+  }
 }
 
 function persist(): void {
@@ -153,6 +148,7 @@ function createControls(hostId: string, specs: NumericControlSpec[]): void {
         const value = Number(input.value)
         if (!Number.isFinite(value)) return
         setPath(config, spec.path, value)
+        lastResult=null
         label.querySelectorAll<HTMLInputElement>('input').forEach((other) => { if (other !== input) other.value = input.value })
         applyConfig(spec.path.startsWith('house.'))
       })
@@ -173,7 +169,7 @@ function applyConfig(geometryChanged = true): void {
   else scene.updateCameraOnly(config)
   persist()
   updateUiState()
-  if (geometryChanged) refreshLandmarks()
+  refreshLandmarks()
 }
 
 function updateUiState(): void {
@@ -202,11 +198,10 @@ createControls('house-controls', houseControls)
 createControls('camera-controls', cameraControls)
 
 document.querySelectorAll<HTMLButtonElement>('[data-camera-mode]').forEach((button) => button.addEventListener('click', () => {
+  closeDroneWorkspace()
   config.cameraMode = button.dataset.cameraMode as CameraMode
   if(config.cameraMode==='free'){
     calibrationActive=false
-    obstructionCaptureCorner=null
-    chimneyCaptureCorner=null
     persistCalibrationView()
     setCalibrationZoom(1,undefined,undefined,false)
   }else{
@@ -215,6 +210,16 @@ document.querySelectorAll<HTMLButtonElement>('[data-camera-mode]').forEach((butt
   applyConfig(false)
   updateCalibrationUi()
 }))
+element('drone-mode').addEventListener('click',()=>{
+  const host=element<HTMLElement>('drone-workspace')
+  element('panel').hidden=true;element('workspace').hidden=true;host.hidden=false
+  element('drone-mode').classList.add('active')
+  droneWorkspace??=new DroneWorkspace(host,config.roofObstructions,closeDroneWorkspace)
+})
+function closeDroneWorkspace():void{
+  element('drone-workspace').hidden=true;element('panel').hidden=false;element('workspace').hidden=false
+  element('drone-mode').classList.remove('active')
+}
 document.querySelectorAll<HTMLButtonElement>('[data-overlay]').forEach((button) => button.addEventListener('click', () => {
   config.overlayMode = button.dataset.overlay as OverlayMode
   applyConfig(false)
@@ -230,11 +235,13 @@ element<HTMLInputElement>('show-calibration-markers').addEventListener('change',
   updateCalibrationUi()
 })
 element('reset-house').addEventListener('click', () => {
+  lastResult=null
   config.house = cloneDefaultConfig().house
   syncControlValues()
   applyConfig()
 })
 element('reset-camera').addEventListener('click', () => {
+  lastResult=null
   if (config.cameraMode === 'free') scene.resetFreeCamera()
   else {
     const aspectRatio = photoUrl ? config.photoCamera.aspectRatio : cloneDefaultConfig().photoCamera.aspectRatio
@@ -246,6 +253,7 @@ element('reset-camera').addEventListener('click', () => {
 element<HTMLInputElement>('focal-length').addEventListener('input', (event) => {
   const value = Number((event.target as HTMLInputElement).value)
   if (value <= 0) return
+  lastResult=null
   config.photoCamera.verticalFovDeg = focalLength35ToVerticalFov(value, config.photoCamera.aspectRatio)
   syncControlValues()
   applyConfig(false)
@@ -268,18 +276,14 @@ async function loadSourcePhoto(blob: Blob, name: string, isNewPhoto: boolean): P
     sourcePhoto = image
     sourcePhotoName = name
     if (isNewPhoto) {
-      config.photoRotationDeg = IPHONE_11_PRO_PHOTO_REFERENCE.requiredRotationDeg
-      calibrationObservations=[]
-      persistCalibrationObservations()
-      config.roofObstructionCalibration.observations=[]
-      config.roofObstructionCalibration.chimneyObservations=[]
+      // Tripod series: camera and measurements persist across equal-format photos.
       persist()
       updateCalibrationUi()
       setCalibrationZoom(1)
     } else if(config.cameraMode==='photo') {
       restoreCalibrationView()
     }
-    renderRotatedPhoto(isNewPhoto)
+    renderRotatedPhoto()
   }
   image.onerror = () => {
     URL.revokeObjectURL(sourceUrl)
@@ -296,28 +300,13 @@ async function loadSourcePhoto(blob: Blob, name: string, isNewPhoto: boolean): P
 }
 element('capture-point').addEventListener('click', () => {
   if (!photoUrl) { showStatus('Bitte zuerst ein Referenzfoto auswählen.', true); return }
-  obstructionCaptureCorner=null
-  chimneyCaptureCorner=null
-  calibrationActive = !calibrationActive
-  updateCalibrationUi()
+  config.cameraMode='photo'
+  calibrationActive=!calibrationActive
+  config.showCalibrationMarkers=true
+  applyConfig(false)
 })
-element('capture-obstruction-point').addEventListener('click',()=>{
-  if(!photoUrl){showStatus('Bitte zuerst ein Referenzfoto auswählen.',true);return}
-  calibrationActive=false
-  chimneyCaptureCorner=null
-  obstructionCaptureCorner=element<HTMLSelectElement>('obstruction-corner').value as ObstructionCorner
-  updateCalibrationUi()
-})
-element<HTMLInputElement>('use-obstruction-calibration').addEventListener('change',(event)=>{
-  config.useRoofObstructionCalibration=(event.target as HTMLInputElement).checked
-  applyConfig()
-})
-element('capture-chimney-point').addEventListener('click',()=>{
-  if(!photoUrl){showStatus('Bitte zuerst ein Referenzfoto auswählen.',true);return}
-  calibrationActive=false;obstructionCaptureCorner=null
-  chimneyCaptureCorner=element<HTMLSelectElement>('chimney-corner').value as ObstructionCorner
-  updateCalibrationUi()
-})
+element('object-select').addEventListener('change',()=>{calibrationActive=false;refreshLandmarks()})
+element('landmark-select').addEventListener('change',()=>{calibrationActive=false;updateCalibrationUi()})
 element<HTMLInputElement>('calibration-zoom').addEventListener('input', (event) => {
   setCalibrationZoom(Number((event.target as HTMLInputElement).value))
 })
@@ -369,6 +358,7 @@ stage.addEventListener('wheel',(event)=>{
 element('workspace').addEventListener('pointerdown',(event)=>{
   if(calibrationZoom<=1 || config.cameraMode!=='photo')return
   if(!(event.target instanceof Node) || !stage.contains(event.target))return
+  if(event.target instanceof Element&&event.target.closest('button.calibration-marker'))return
   event.preventDefault()
   event.stopPropagation()
   const workspace=element('workspace')
@@ -393,12 +383,12 @@ element('workspace').addEventListener('pointerup',(event)=>{
   panStart=null
   element('workspace').releasePointerCapture(event.pointerId)
   stage.classList.remove('panning')
-  if(!wasDrag && (calibrationActive||obstructionCaptureCorner||chimneyCaptureCorner)) placeCalibrationPoint(event.clientX,event.clientY)
+  if(!wasDrag && calibrationActive) placeCalibrationPoint(event.clientX,event.clientY)
   suppressCalibrationClick=true
   persistCalibrationView()
 },true)
 stage.addEventListener('mousemove',(event)=>{
-  if(!calibrationActive&&!obstructionCaptureCorner&&!chimneyCaptureCorner)return
+  if(!calibrationActive)return
   const rect=stage.getBoundingClientRect()
   const cursor=element('precision-cursor')
   cursor.style.left=`${(event.clientX-rect.left)/calibrationZoom}px`
@@ -406,92 +396,48 @@ stage.addEventListener('mousemove',(event)=>{
 })
 stage.addEventListener('click', (event) => {
   if(suppressCalibrationClick){ suppressCalibrationClick=false; return }
-  if ((!calibrationActive&&!obstructionCaptureCorner&&!chimneyCaptureCorner) || config.cameraMode !== 'photo') return
+  if ((!calibrationActive) || config.cameraMode !== 'photo') return
   placeCalibrationPoint(event.clientX,event.clientY)
 })
 function placeCalibrationPoint(clientX:number,clientY:number):void {
-  if ((!calibrationActive&&!obstructionCaptureCorner&&!chimneyCaptureCorner) || config.cameraMode !== 'photo') return
+  if ((!calibrationActive) || config.cameraMode !== 'photo') return
   const rect=stage.getBoundingClientRect()
   const x=((clientX-rect.left)/rect.width)*2-1
   const y=1-((clientY-rect.top)/rect.height)*2
-  if(chimneyCaptureCorner){
-    config.roofObstructionCalibration.chimneyObservations=config.roofObstructionCalibration.chimneyObservations.filter(o=>o.corner!==chimneyCaptureCorner)
-    config.roofObstructionCalibration.chimneyObservations.push({corner:chimneyCaptureCorner,x,y})
-    chimneyCaptureCorner=null;persist()
-  }else if(obstructionCaptureCorner){
-    config.roofObstructionCalibration.observations=config.roofObstructionCalibration.observations.filter(o=>o.corner!==obstructionCaptureCorner)
-    config.roofObstructionCalibration.observations.push({corner:obstructionCaptureCorner,x,y})
-    obstructionCaptureCorner=null
-    persist()
-  }else{
-    calibrationObservations=calibrationObservations.filter(o=>o.landmarkId!==landmarkSelect.value)
-    calibrationObservations.push({landmarkId:landmarkSelect.value,x,y})
-    persistCalibrationObservations()
-    calibrationActive=false
-  }
+  const existing=config.calibration.observations.find(o=>o.pointId===landmarkSelect.value)
+  if(existing){existing.x=x;existing.y=y}
+  else config.calibration.observations.push({pointId:landmarkSelect.value,x,y,active:true,weight:1})
+  calibrationActive=false
+  lastResult=null
+  persist()
   updateCalibrationUi()
 }
-element('clear-points').addEventListener('click', () => {
-  calibrationObservations=[]
-  persistCalibrationObservations()
-  updateCalibrationUi()
+element('solve-calibration').addEventListener('click',()=>{
+  lastResult=optimizeJoint(config)
+  if(lastResult.accepted){config=lastResult.config;syncControlValues();applyConfig()}
+  else updateCalibrationUi()
 })
-element('solve-camera').addEventListener('click', () => {
-  if(calibrationObservations.length<4){ element('calibration-status').textContent='Mindestens vier Punkte erforderlich.'; return }
-  const result=optimizeCamera(config.house,config.photoCamera,calibrationObservations)
-  config.photoCamera=result.camera
-  syncControlValues()
-  applyConfig(false)
-  const rect=stage.getBoundingClientRect()
-  const rmsPx=result.rmsNormalized*Math.hypot(rect.width,rect.height)/2
-  element('calibration-status').textContent=`Optimiert: mittlerer Projektionsfehler ca. ${rmsPx.toFixed(1)} px. FOV blieb unverändert.`
+element<HTMLInputElement>('robust-threshold').addEventListener('change',event=>{
+  const value=Number((event.target as HTMLInputElement).value)
+  if(value>0&&value<=100){config.calibration.robustThresholdPx=value;lastResult=null;persist();updateCalibrationUi()}
 })
-element('solve-obstructions').addEventListener('click',()=>{
-  const observations=config.roofObstructionCalibration.observations
-  if(observations.length<4){element('obstruction-calibration-status').textContent='Bitte alle vier Ecken des Bad-Fensters setzen.';return}
-  const obstruction=config.roofObstructions.find(o=>o.id==='east-03')
-  if(!obstruction)return
-  const result=optimizeObstructionCalibration(config.house,config.photoCamera,obstruction,config.roofObstructionCalibration,observations)
-  config.roofObstructionCalibration=result.calibration
-  config.useRoofObstructionCalibration=true
-  applyConfig()
-  const rect=stage.getBoundingClientRect()
-  const rms=result.rmsNormalized*Math.hypot(rect.width,rect.height)/2
-  element('obstruction-calibration-status').textContent=`Gespeichert: Versatz ${result.calibration.alongOffset.toFixed(3)} / ${result.calibration.slopeOffset.toFixed(3)} m, Maßstab ${result.calibration.alongScale.toFixed(4)} / ${result.calibration.slopeScale.toFixed(4)}, Fehler ca. ${rms.toFixed(1)} px.`
-})
-element('reset-obstructions').addEventListener('click',()=>{
-  config.roofObstructionCalibration={alongOffset:0,slopeOffset:0,alongScale:1,slopeScale:1,observations:[],chimneyHeight:1.5,chimneyObservations:[]}
-  config.useRoofObstructionCalibration=false
-  applyConfig()
-  updateCalibrationUi()
-})
-element<HTMLInputElement>('chimney-height').addEventListener('input',(event)=>{
-  const height=Number((event.target as HTMLInputElement).value);if(!Number.isFinite(height)||height<=0)return
-  config.roofObstructionCalibration.chimneyHeight=height;applyConfig()
-})
-element('solve-chimney').addEventListener('click',()=>{
-  const observations=config.roofObstructionCalibration.chimneyObservations
-  if(!observations.some(o=>o.corner==='upper-left'||o.corner==='upper-right')){element('chimney-calibration-status').textContent='Mindestens eine obere Ecke der Kaminöffnung setzen.';return}
-  const chimney=config.roofObstructions.find(o=>o.id==='east-01');if(!chimney)return
-  const result=optimizeChimneyHeight(config.house,config.photoCamera,chimney,config.roofObstructionCalibration,observations)
-  config.roofObstructionCalibration.chimneyHeight=result.height;applyConfig()
-  element('chimney-calibration-status').textContent=`Gespeicherte Kaminhöhe: ${result.height.toFixed(3)} m.`
+element('export-legacy').addEventListener('click',()=>{
+  const original=config.calibration.legacyConfig??localStorage.getItem('pv-shadowlab-before-phase2')
+  if(original)downloadJson(original,'pv-shadowlab-phase1-original.json')
 })
 element('rotate-left').addEventListener('click', () => rotatePhoto(90))
 element('rotate-right').addEventListener('click', () => rotatePhoto(-90))
 element('reset-rotation').addEventListener('click', () => {
   if (!sourcePhoto) return
-  config.photoRotationDeg = 90
-  renderRotatedPhoto(false)
+  rotatePhoto(90-config.photoRotationDeg)
 })
-element('export-config').addEventListener('click', () => {
-  const blob = new Blob([exportConfig(config)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = 'pv-shadowlab-konfiguration.json'
-  anchor.click()
+function downloadJson(json:string,name:string):void{
+  const url=URL.createObjectURL(new Blob([json],{type:'application/json'}))
+  const anchor=document.createElement('a');anchor.href=url;anchor.download=name;anchor.click()
   URL.revokeObjectURL(url)
+}
+element('export-config').addEventListener('click',()=>{
+  downloadJson(exportConfig(config),'pv-shadowlab-konfiguration.json')
   showStatus('Konfiguration exportiert.')
 })
 element<HTMLInputElement>('import-config').addEventListener('change', async (event) => {
@@ -499,8 +445,9 @@ element<HTMLInputElement>('import-config').addEventListener('change', async (eve
   if (!file) return
   try {
     config = importConfig(await file.text())
-    calibrationObservations=[...config.calibrationObservations]
-    obstructionCaptureCorner=null
+    calibrationActive=false
+    lastResult=null
+    if(sourcePhoto)renderRotatedPhoto()
     syncControlValues()
     applyConfig()
     showStatus('Konfiguration erfolgreich importiert.')
@@ -515,21 +462,17 @@ function showStatus(message: string, error = false): void {
   status.classList.toggle('error', error)
 }
 
-function persistCalibrationObservations():void {
-  config.calibrationObservations=[...calibrationObservations]
-  persist()
-}
-
 function rotatePhoto(deltaDeg: number): void {
   if (!sourcePhoto) {
     showStatus('Bitte zuerst ein Referenzfoto auswählen.', true)
     return
   }
-  config.photoRotationDeg = ((config.photoRotationDeg + deltaDeg + 360) % 360) as AppConfig['photoRotationDeg']
-  renderRotatedPhoto(false)
+  rotateCalibration(config,deltaDeg)
+  lastResult=null
+  renderRotatedPhoto()
 }
 
-function renderRotatedPhoto(applyOpticalDefaults = false): void {
+function renderRotatedPhoto(): void {
   if (!sourcePhoto) return
   const quarterTurn = config.photoRotationDeg === 90 || config.photoRotationDeg === 270
   const canvas = document.createElement('canvas')
@@ -553,13 +496,18 @@ function renderRotatedPhoto(applyOpticalDefaults = false): void {
     if (photoUrl) URL.revokeObjectURL(photoUrl)
     photoUrl = URL.createObjectURL(blob)
     referencePhoto.onload = () => {
-      config.photoCamera.aspectRatio = referencePhoto.naturalWidth / referencePhoto.naturalHeight
-      if (applyOpticalDefaults) {
-        config.photoCamera.verticalFovDeg = focalLength35ToVerticalFov(
-          IPHONE_11_PRO_PHOTO_REFERENCE.equivalentFocalLength35Mm,
-          config.photoCamera.aspectRatio,
-        )
+      const width=referencePhoto.naturalWidth,height=referencePhoto.naturalHeight
+      const oldAspect=config.photoCamera.aspectRatio,newAspect=width/height
+      if(Math.abs(oldAspect-newAspect)>1e-8){
+        const focal=verticalFovToFocalLength35(config.photoCamera.verticalFovDeg,oldAspect)
+        config.photoCamera.verticalFovDeg=focalLength35ToVerticalFov(focal,newAspect)
       }
+      config.photoCamera.aspectRatio=newAspect
+      if(config.calibration.observations.length&&Math.abs(config.calibration.imageWidth/config.calibration.imageHeight-newAspect)>1e-8){
+        config.calibration.observations.forEach(o=>{o.active=false})
+        showStatus('Anderes Bildformat: Messpunkte zur Prüfung deaktiviert. Kamerapose bleibt erhalten; Bildwinkel an das Format angepasst.',true)
+      }
+      config.calibration.imageWidth=width;config.calibration.imageHeight=height
       config.cameraMode = 'photo'
       syncControlValues()
       element('photo-info').textContent = `${sourcePhotoName} · ${referencePhoto.naturalWidth} × ${referencePhoto.naturalHeight} px · ${config.photoRotationDeg}° CCW · Seitenverhältnis fixiert`
@@ -570,46 +518,105 @@ function renderRotatedPhoto(applyOpticalDefaults = false): void {
 }
 
 function refreshLandmarks(): void {
-  const selected=landmarkSelect.value
-  landmarkSelect.replaceChildren(...calibrationLandmarks(config.house).map(l=>new Option(l.label,l.id)))
-  if([...landmarkSelect.options].some(o=>o.value===selected)) landmarkSelect.value=selected
+  const refs=referencePoints(config),objectSelect=element<HTMLSelectElement>('object-select')
+  const selectedObject=objectSelect.value,selected=landmarkSelect.value
+  const objects=new Map(refs.map(p=>[p.objectId,p.objectName]))
+  objectSelect.replaceChildren(...[...objects].map(([id,name])=>new Option(name,id)))
+  if(objects.has(selectedObject))objectSelect.value=selectedObject
+  landmarkSelect.replaceChildren(...refs.filter(p=>p.objectId===objectSelect.value).map(p=>new Option(p.label,p.id)))
+  if([...landmarkSelect.options].some(o=>o.value===selected))landmarkSelect.value=selected
+  updateCalibrationUi()
+}
+
+function selectMeasurement(id:string):void{
+  const ref=referencePoints(config).find(p=>p.id===id)
+  if(!ref)return
+  element<HTMLSelectElement>('object-select').value=ref.objectId
+  refreshLandmarks();landmarkSelect.value=id
+  if(photoUrl&&config.cameraMode==='photo')calibrationActive=true
   updateCalibrationUi()
 }
 
 function updateCalibrationUi(): void {
-  element('capture-point').classList.toggle('active',calibrationActive)
-  element('capture-point').textContent=calibrationActive?'Jetzt ins Foto klicken …':'Punkt im Foto setzen'
-  element('capture-obstruction-point').classList.toggle('active',obstructionCaptureCorner!==null)
-  element('capture-obstruction-point').textContent=obstructionCaptureCorner?'Jetzt Fensterecke anklicken …':'Fensterecke im Foto setzen'
-  element('capture-chimney-point').classList.toggle('active',chimneyCaptureCorner!==null)
-  element('capture-chimney-point').textContent=chimneyCaptureCorner?'Jetzt Kaminecke anklicken …':'Kaminecke setzen'
-  stage.classList.toggle('calibration-active',calibrationActive||obstructionCaptureCorner!==null||chimneyCaptureCorner!==null)
-  stage.querySelectorAll('.calibration-marker').forEach(m=>m.remove())
-  const names=new Map(calibrationLandmarks(config.house).map(l=>[l.id,l.label]))
-  const cornerNames:Record<ObstructionCorner,string>={'lower-left':'unten links','lower-right':'unten rechts','upper-right':'oben rechts','upper-left':'oben links'}
+  const capture=element<HTMLButtonElement>('capture-point')
+  capture.classList.toggle('active',calibrationActive)
+  capture.textContent=calibrationActive?'Jetzt ins Foto klicken …':'Punkt im Foto setzen / korrigieren'
+  stage.classList.toggle('calibration-active',calibrationActive&&config.cameraMode==='photo')
+  stage.querySelectorAll('.calibration-marker,.calibration-residuals').forEach(m=>m.remove())
+  element<HTMLInputElement>('show-calibration-markers').checked=config.showCalibrationMarkers
+  const diagnostics=calibrationDiagnostics(config)
   if(config.cameraMode==='photo'&&config.showCalibrationMarkers){
-    for(const [index,o] of calibrationObservations.entries()){
-      const marker=document.createElement('span')
-      marker.className='calibration-marker'
-      marker.style.left=`${(o.x+1)*50}%`; marker.style.top=`${(1-o.y)*50}%`; marker.textContent=String(index+1)
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg')
+    svg.classList.add('calibration-residuals');svg.setAttribute('viewBox','0 0 100 100');svg.setAttribute('preserveAspectRatio','none')
+    for(const p of diagnostics.points){
+      const marker=document.createElement('button')
+      marker.type='button';marker.className='calibration-marker'+(p.objectId==='east-01'?' chimney-marker':p.objectId!=='house'?' obstruction-marker':'')+(p.active?'':' inactive-marker')
+      marker.title=p.label+' – klicken zum Korrigieren';marker.setAttribute('aria-label',marker.title)
+      marker.style.left=(p.measured.x+1)*50+'%';marker.style.top=(1-p.measured.y)*50+'%'
+      marker.addEventListener('click',event=>{event.stopPropagation();selectMeasurement(p.pointId)})
+      marker.addEventListener('pointerdown',event=>event.stopPropagation())
       stage.append(marker)
+      if(p.projected){
+        const line=document.createElementNS(svg.namespaceURI,'line')
+        if(!p.active)line.setAttribute('opacity','0.3')
+        line.setAttribute('x1',String((p.measured.x+1)*50));line.setAttribute('y1',String((1-p.measured.y)*50))
+        line.setAttribute('x2',String((p.projected.x+1)*50));line.setAttribute('y2',String((1-p.projected.y)*50))
+        line.setAttribute('vector-effect','non-scaling-stroke');svg.append(line)
+        const projected=document.createElement('span');projected.className='calibration-marker projected-marker'+(p.active?'':' inactive-marker')
+        projected.style.left=(p.projected.x+1)*50+'%';projected.style.top=(1-p.projected.y)*50+'%';stage.append(projected)
+      }
     }
-    for(const observation of config.roofObstructionCalibration.observations){
-      const marker=document.createElement('span')
-      marker.className='calibration-marker obstruction-marker'
-      marker.style.left=`${(observation.x+1)*50}%`;marker.style.top=`${(1-observation.y)*50}%`
-      stage.append(marker)
-    }
-    for(const observation of config.roofObstructionCalibration.chimneyObservations){
-      const marker=document.createElement('span');marker.className='calibration-marker chimney-marker'
-      marker.style.left=`${(observation.x+1)*50}%`;marker.style.top=`${(1-observation.y)*50}%`;stage.append(marker)
-    }
+    stage.append(svg)
   }
-  element('calibration-list').textContent=calibrationObservations.map((o,i)=>`${i+1}. ${names.get(o.landmarkId)}`).join(' · ') || 'Noch keine Punkte gesetzt.'
-  element('obstruction-calibration-list').textContent=config.roofObstructionCalibration.observations.map(o=>cornerNames[o.corner]).join(' · ')||'Noch keine Fensterecken gesetzt.'
-  element('chimney-calibration-list').textContent=config.roofObstructionCalibration.chimneyObservations.map(o=>cornerNames[o.corner]).join(' · ')||'Noch keine Kaminecken gesetzt.'
-  element<HTMLInputElement>('chimney-height').value=config.roofObstructionCalibration.chimneyHeight.toFixed(3)
-  element<HTMLInputElement>('use-obstruction-calibration').checked=config.useRoofObstructionCalibration
+  const status=element('calibration-status')
+  status.textContent=(lastResult?lastResult.status+' · '+lastResult.iterations+' Iterationen · Rang '+lastResult.rank+'/'+lastResult.parameterCount:'Aktueller Modellstand')+' · '+diagnostics.activeCount+' aktive Punkte · RMS '+diagnostics.rmsPx.toFixed(2)+' px · Maximum '+diagnostics.maxPx.toFixed(2)+' px'
+  if(lastResult?.accepted&&lastResult.condition>1e6)status.textContent+=' · schwach bestimmt'
+  const warnings=[...new Set([...diagnostics.warnings,...(lastResult?.warnings??[])])]
+  for(const warning of warnings){const p=document.createElement('p');p.className='calibration-warning';p.textContent=warning;status.append(p)}
+  const list=element('calibration-list');list.replaceChildren()
+  for(const p of [...diagnostics.points].sort((a,b)=>b.errorPx-a.errorPx)){
+    const row=document.createElement('div');row.className='measurement-row'
+    const active=document.createElement('input');active.type='checkbox';active.checked=p.active;active.title='Punkt aktivieren / deaktivieren'
+    active.addEventListener('change',()=>{config.calibration.observations.find(o=>o.pointId===p.pointId)!.active=active.checked;lastResult=null;persist();updateCalibrationUi()})
+    const name=document.createElement('button');name.textContent=p.label;name.title='Punkt erneut setzen';name.addEventListener('click',()=>selectMeasurement(p.pointId))
+    const error=document.createElement('span');error.textContent=Number.isFinite(p.errorPx)?p.errorPx.toFixed(1)+' px':'nicht projizierbar';error.title=p.robustWeight<1?'Robust abgewichtet (Faktor '+p.robustWeight.toFixed(3)+')':'Volles Messgewicht'
+    const weight=document.createElement('input');weight.type='number';weight.min='0.01';weight.max='100';weight.step='0.1';weight.value=String(p.weight);weight.title='Messgewicht'
+    weight.addEventListener('change',()=>{const v=Number(weight.value);if(v>0&&v<=100){config.calibration.observations.find(o=>o.pointId===p.pointId)!.weight=v;lastResult=null;persist();updateCalibrationUi()}})
+    const remove=document.createElement('button');remove.textContent='×';remove.title='Nur diesen Punkt löschen';remove.addEventListener('click',()=>{config.calibration.observations=config.calibration.observations.filter(o=>o.pointId!==p.pointId);lastResult=null;persist();updateCalibrationUi()})
+    row.append(active,name,error,weight,remove);list.append(row)
+  }
+  if(!diagnostics.points.length)list.textContent='Noch keine Punkte gesetzt. Mindestens vier gut verteilte Punkte für die sechs Kameraparameter verwenden.'
+  element<HTMLInputElement>('robust-threshold').value=String(config.calibration.robustThresholdPx)
+  renderParameterControls()
+  const notes=element('migration-notes');notes.replaceChildren(...config.calibration.migrationNotes.map(note=>{const p=document.createElement('p');p.textContent=note;return p}))
+  element<HTMLButtonElement>('export-legacy').hidden=!config.calibration.legacyConfig&&!localStorage.getItem('pv-shadowlab-before-phase2')
+  const deviations=element('reference-deviations');deviations.replaceChildren()
+  const geometry=document.createElement('p')
+  geometry.textContent='Abgeleitete Firstlänge '+(config.house.depth+2*config.house.gableOverhang).toFixed(3)+' m; Dachschräge '+((config.house.width/2+config.house.eaveOverhang)/Math.cos(config.house.roofPitchDeg*Math.PI/180)).toFixed(3)+' m. Kaminoberkante Y = '+config.calibration.chimneyTopY.toFixed(3)+' m (absolut).'
+  deviations.append(geometry)
+  if(lastResult){const p=document.createElement('p');p.textContent='Konditionszahl der normierten Informationsmatrix: '+lastResult.condition.toExponential(2)+'. Große Werte zeigen korrelierte Parameter; keine Messgenauigkeit ableitbar.';deviations.append(p)}
+  for(const o of config.roofObstructions){
+    const c=config.calibration.corrections[o.id]??IDENTITY_CORRECTION
+    const p=document.createElement('p');p.textContent=o.name+': PV-Plan X '+o.alongMin+'…'+o.alongMax+' m, Y '+o.slopeMin+'…'+o.slopeMax+' m; Korrektur Position '+c.alongOffset.toFixed(3)+' / '+c.slopeOffset.toFixed(3)+' m, Maße × '+c.alongScale.toFixed(4)+' / '+c.slopeScale.toFixed(4);deviations.append(p)
+  }
+}
+
+function renderParameterControls():void{
+  const host=element('parameter-controls');host.replaceChildren()
+  let group=''
+  for(const spec of parameterSpecs()){
+    if(group!==spec.group){const heading=document.createElement('p');heading.textContent=spec.group;heading.className='parameter-heading';host.append(heading);group=spec.group}
+    const setting=config.calibration.parameters.find(p=>p.id===spec.id)!
+    const row=document.createElement('div');row.className='parameter-row'
+    const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=setting.enabled;enabled.title='Parameter freigeben'
+    enabled.addEventListener('change',()=>{setting.enabled=enabled.checked;lastResult=null;persist();updateCalibrationUi()})
+    const label=document.createElement('label');label.textContent=spec.label
+    const current=document.createElement('input');current.type='number';current.step='any';current.value=getParameter(config,spec.id).toFixed(5);current.title='Aktueller Wert';current.min=String(setting.min);current.max=String(setting.max)
+    current.addEventListener('change',()=>{const v=Number(current.value);if(Number.isFinite(v)&&v>=setting.min&&v<=setting.max){setParameter(config,spec.id,v);lastResult=null;syncControlValues();applyConfig()}else updateCalibrationUi()})
+    const bounds=document.createElement('div');bounds.className='parameter-bounds'
+    for(const key of ['min','max'] as const){const input=document.createElement('input');input.type='number';input.step='any';input.value=String(setting[key]);input.title=key==='min'?'Untergrenze':'Obergrenze';input.addEventListener('change',()=>{const v=Number(input.value);if(Number.isFinite(v)&&v>=spec.min&&v<=spec.max&&(key==='min'?v<setting.max:v>setting.min)){setting[key]=v;lastResult=null;persist()}else input.value=String(setting[key])});bounds.append(input)}
+    row.append(enabled,label,current,bounds);host.append(row)
+  }
 }
 
 function persistCalibrationView():void {

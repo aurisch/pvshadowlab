@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import type { AppConfig, PhotoCameraParameters } from '../model/types.ts'
+import type { AppConfig } from '../model/types.ts'
 import { HouseView } from './HouseView.ts'
+import { applyPhotoCamera } from './photoCamera.ts'
 
 export class SceneController {
   private readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
@@ -44,9 +45,9 @@ export class SceneController {
 
   update(config: AppConfig): void {
     this.config = config
-    this.house.update(config.house, config.roofObstructions, config.showObstructionLabels, config.roofObstructionCalibration, config.useRoofObstructionCalibration)
+    this.house.update(config.house, config.roofObstructions, config.showObstructionLabels, config.calibration)
     this.house.setOpacity(config.modelOpacity)
-    this.applyPhotoCamera(config.photoCamera)
+    applyPhotoCamera(this.photoCamera,config.photoCamera)
     this.controls.enabled = config.cameraMode === 'free'
     this.resize()
   }
@@ -54,7 +55,7 @@ export class SceneController {
   updateCameraOnly(config: AppConfig): void {
     this.config = config
     this.house.setOpacity(config.modelOpacity)
-    this.applyPhotoCamera(config.photoCamera)
+    applyPhotoCamera(this.photoCamera,config.photoCamera)
     this.controls.enabled = config.cameraMode === 'free'
     this.resize()
   }
@@ -63,23 +64,6 @@ export class SceneController {
     this.freeCamera.position.set(14, 10, 16)
     this.controls.target.set(0, 3, 0)
     this.controls.update()
-  }
-
-  private applyPhotoCamera(c: PhotoCameraParameters): void {
-    this.photoCamera.position.set(c.x, c.y, c.z)
-    this.photoCamera.fov = c.verticalFovDeg
-    this.photoCamera.aspect = c.aspectRatio
-    const azimuth = THREE.MathUtils.degToRad(c.azimuthDeg)
-    const elevation = THREE.MathUtils.degToRad(c.elevationDeg)
-    const direction = new THREE.Vector3(
-      Math.sin(azimuth) * Math.cos(elevation),
-      Math.sin(elevation),
-      Math.cos(azimuth) * Math.cos(elevation),
-    )
-    this.photoCamera.up.set(0, 1, 0)
-    this.photoCamera.lookAt(this.photoCamera.position.clone().add(direction))
-    this.photoCamera.rotateZ(THREE.MathUtils.degToRad(c.rollDeg))
-    this.photoCamera.updateProjectionMatrix()
   }
 
   private resize(): void {

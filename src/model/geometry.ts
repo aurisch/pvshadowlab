@@ -1,4 +1,4 @@
-import type { HouseParameters, RoofObstruction, RoofObstructionCalibration } from './types.ts'
+import type { HouseParameters, RoofObstruction, ObjectCorrection } from './types.ts'
 
 export interface Point3 { x: number; y: number; z: number }
 
@@ -54,13 +54,16 @@ export function calculateHouseGeometry(p: HouseParameters): HouseGeometryData {
 
 export function validateHouseParameters(p: HouseParameters): string[] {
   const errors: string[] = []
+  if(Object.values(p).some(v=>typeof v!=='number'||!Number.isFinite(v)))errors.push('Hausparameter müssen endliche Zahlen sein.')
   if (p.width <= 0 || p.depth <= 0 || p.eavesHeight <= 0) errors.push('Gebäudemaße müssen größer als 0 sein.')
   if (p.roofPitchDeg <= 0 || p.roofPitchDeg >= 80) errors.push('Die Dachneigung muss zwischen 0° und 80° liegen.')
   if (p.eaveOverhang < 0 || p.gableOverhang < 0) errors.push('Dachüberstände dürfen nicht negativ sein.')
   return errors
 }
 
-export function calculateObstructionCorners(p:HouseParameters,o:RoofObstruction,calibration:RoofObstructionCalibration={alongOffset:0,slopeOffset:0,alongScale:1,slopeScale:1,observations:[],chimneyHeight:1.5,chimneyObservations:[]}):[Point3,Point3,Point3,Point3]{
+export const IDENTITY_CORRECTION: ObjectCorrection = {alongOffset:0,slopeOffset:0,alongScale:1,slopeScale:1}
+
+export function calculateObstructionCorners(p:HouseParameters,o:RoofObstruction,calibration:ObjectCorrection=IDENTITY_CORRECTION):[Point3,Point3,Point3,Point3]{
   const pitch=rad(p.roofPitchDeg)
   const roofHalfWidth=p.width/2+p.eaveOverhang
   const roofHalfDepth=p.depth/2+p.gableOverhang
@@ -76,4 +79,10 @@ export function calculateObstructionCorners(p:HouseParameters,o:RoofObstruction,
     })
   }
   return [point(o.alongMin,o.slopeMin),point(o.alongMax,o.slopeMin),point(o.alongMax,o.slopeMax),point(o.alongMin,o.slopeMax)]
+}
+
+/** Vertical walls intersect the roof plane at base; the horizontal opening is at absolute Y. */
+export function calculateChimney(p:HouseParameters,o:RoofObstruction,topY:number,correction?:ObjectCorrection){
+  const base=calculateObstructionCorners(p,o,correction)
+  return {base,top:base.map(point=>({...point,y:topY})) as [Point3,Point3,Point3,Point3]}
 }

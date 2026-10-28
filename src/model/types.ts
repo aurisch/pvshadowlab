@@ -17,11 +17,13 @@ export interface PhotoCameraParameters {
   rollDeg: number
   verticalFovDeg: number
   aspectRatio: number
+  principalX: number
+  principalY: number
 }
 
 export type CameraMode = 'free' | 'photo'
 export type OverlayMode = 'photo' | 'model' | 'overlay'
-export interface CalibrationObservation { landmarkId: string; x: number; y: number }
+export interface CalibrationObservation { pointId: string; x: number; y: number; active: boolean; weight: number }
 export interface RoofObstruction {
   id: string
   name: string
@@ -33,20 +35,28 @@ export interface RoofObstruction {
   normalOffset: number
   kind: 'chimney' | 'window' | 'vent'
 }
-export type ObstructionCorner = 'lower-left'|'lower-right'|'upper-right'|'upper-left'
-export interface ObstructionCalibrationObservation { corner:ObstructionCorner; x:number; y:number }
-export interface RoofObstructionCalibration {
+export interface ObjectCorrection {
   alongOffset:number
   slopeOffset:number
   alongScale:number
   slopeScale:number
-  observations:ObstructionCalibrationObservation[]
-  chimneyHeight:number
-  chimneyObservations:ObstructionCalibrationObservation[]
+}
+
+export interface ParameterSetting { id: string; enabled: boolean; min: number; max: number }
+export interface JointCalibration {
+  observations: CalibrationObservation[]
+  parameters: ParameterSetting[]
+  corrections: Record<string, ObjectCorrection>
+  chimneyTopY: number
+  imageWidth: number
+  imageHeight: number
+  robustThresholdPx: number
+  migrationNotes: string[]
+  legacyConfig?: string
 }
 
 export interface AppConfig {
-  version: 1
+  version: 2
   houseReferenceRevision: number
   house: HouseParameters
   photoCamera: PhotoCameraParameters
@@ -54,11 +64,9 @@ export interface AppConfig {
   overlayMode: OverlayMode
   modelOpacity: number
   photoRotationDeg: 0 | 90 | 180 | 270
-  calibrationObservations: CalibrationObservation[]
+  calibration: JointCalibration
   showCalibrationMarkers: boolean
   roofObstructions: RoofObstruction[]
   showObstructionLabels: boolean
-  roofObstructionCalibration: RoofObstructionCalibration
-  useRoofObstructionCalibration: boolean
   lensDistortion: null
 }

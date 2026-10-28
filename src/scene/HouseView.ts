@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import type { HouseParameters, RoofObstruction, RoofObstructionCalibration } from '../model/types.ts'
-import { calculateHouseGeometry, calculateObstructionCorners } from '../model/geometry.ts'
+import type { HouseParameters, RoofObstruction, JointCalibration } from '../model/types.ts'
+import { calculateHouseGeometry, calculateObstructionCorners, calculateChimney } from '../model/geometry.ts'
 
 function quadGeometry(points: readonly { x: number; y: number; z: number }[]): THREE.BufferGeometry {
   const positions = points.flatMap(({ x, y, z }) => [x, y, z])
@@ -26,10 +26,17 @@ export class HouseView extends THREE.Group {
   private body: THREE.Mesh | null = null
   private readonly generated: THREE.Object3D[] = []
 
-  update(parameters: HouseParameters, obstructions: RoofObstruction[] = [], showLabels = false, calibration?:RoofObstructionCalibration, useCalibration = false): void {
+  update(parameters: HouseParameters, obstructions: RoofObstruction[], showLabels: boolean, calibration:JointCalibration): void {
     for (const object of this.generated) {
       this.remove(object)
-      if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) object.geometry.dispose()
+      if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
+        object.geometry.dispose()
+        const materials=Array.isArray(object.material)?object.material:[object.material]
+        for(const material of materials)if(![this.bodyMaterial,this.leftRoofMaterial,this.rightRoofMaterial].includes(material as THREE.MeshStandardMaterial)){
+          if(material instanceof THREE.MeshBasicMaterial)material.map?.dispose()
+          material.dispose()
+        }
+      }
     }
     this.generated.length = 0
     const data = calculateHouseGeometry(parameters)
@@ -57,14 +64,10 @@ export class HouseView extends THREE.Group {
       this.addEdges(geometry, 0x542a24)
     }
     for(const obstruction of obstructions){
-      const effectiveCalibration=calibration && !useCalibration
-        ? {...calibration,alongOffset:0,slopeOffset:0,alongScale:1,slopeScale:1}
-        : calibration
-      const points=calculateObstructionCorners(parameters,obstruction,effectiveCalibration)
+      const points=calculateObstructionCorners(parameters,obstruction,calibration.corrections[obstruction.id])
       const color=obstruction.kind==='chimney'?0x565b60:obstruction.kind==='vent'?0xe5b63b:0x4e8eae
       if(obstruction.kind==='chimney'){
-        const topY=Math.max(...points.map(point=>point.y))+(calibration?.chimneyHeight??1.5)
-        const top=points.map(point=>({x:point.x,y:topY,z:point.z})) as [typeof points[0],typeof points[0],typeof points[0],typeof points[0]]
+        const {top}=calculateChimney(parameters,obstruction,calibration.chimneyTopY,calibration.corrections[obstruction.id])
         const colors=[0x4d555b,0x68737b,0x3f474d,0x77828a]
         for(let index=0;index<4;index++){
           const next=(index+1)%4
@@ -111,7 +114,7 @@ export class HouseView extends THREE.Group {
         for(const material of materials){
           material.transparent=true
           material.opacity=opacity*factor
-          material.depthWrite=opacity*factor>=.99
+          material.depthWrite=object.renderOrder===0&&opacity*factor>=.99
         }
       }
       if (object instanceof THREE.LineSegments) {

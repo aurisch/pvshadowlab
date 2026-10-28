@@ -3,12 +3,14 @@ import { focalLength35ToVerticalFov } from '../model/cameraMath.ts'
 import { IPHONE_11_PRO_PHOTO_REFERENCE } from './photoReference.ts'
 import { HOUSE_REFERENCE } from './houseReference.ts'
 import { EAST_ROOF_OBSTRUCTIONS } from './roofObstructions.ts'
+import { defaultParameters } from '../model/parameters.ts'
+import { calculateObstructionCorners } from '../model/geometry.ts'
 
 const referenceAspectRatio = IPHONE_11_PRO_PHOTO_REFERENCE.rotatedWidthPx
   / IPHONE_11_PRO_PHOTO_REFERENCE.rotatedHeightPx
 
 export const DEFAULT_CONFIG: AppConfig = {
-  version: 1,
+  version: 2,
   houseReferenceRevision: HOUSE_REFERENCE.revision,
   house: {
     width: HOUSE_REFERENCE.buildingWidthM,
@@ -31,18 +33,23 @@ export const DEFAULT_CONFIG: AppConfig = {
       referenceAspectRatio,
     ),
     aspectRatio: referenceAspectRatio,
+    principalX: 0,
+    principalY: 0,
   },
   cameraMode: 'free',
   overlayMode: 'overlay',
   modelOpacity: 0.72,
   photoRotationDeg: IPHONE_11_PRO_PHOTO_REFERENCE.requiredRotationDeg,
-  calibrationObservations: [],
+  calibration: {
+    observations: [], parameters: defaultParameters(), corrections: {},
+    chimneyTopY: 0, imageWidth: 4032, imageHeight: 3024, robustThresholdPx: 4, migrationNotes: [],
+  },
   showCalibrationMarkers: true,
   roofObstructions: structuredClone(EAST_ROOF_OBSTRUCTIONS),
   showObstructionLabels: false,
-  roofObstructionCalibration: {alongOffset:0,slopeOffset:0,alongScale:1,slopeScale:1,observations:[],chimneyHeight:1.5,chimneyObservations:[]},
-  useRoofObstructionCalibration: false,
   lensDistortion: null,
 }
+
+DEFAULT_CONFIG.calibration.chimneyTopY=Math.max(...calculateObstructionCorners(DEFAULT_CONFIG.house,EAST_ROOF_OBSTRUCTIONS[0]!).map(p=>p.y))+1.5
 
 export const cloneDefaultConfig = (): AppConfig => structuredClone(DEFAULT_CONFIG)

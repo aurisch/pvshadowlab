@@ -1,6 +1,6 @@
-# PV ShadowLab – Phase 1
+# PV ShadowLab – Phase 2
 
-Lokales Werkzeug zum parametrischen Modellieren eines einfachen Hauses und zum manuellen Kalibrieren einer idealen perspektivischen Kamera anhand eines iPhone-Fotos. Es gibt bewusst noch keine PV-, Sonnenstands- oder Verschattungssimulation.
+Lokales Werkzeug zum parametrischen Modellieren eines einfachen Hauses und zur gemeinsamen geometrischen Kalibrierung anhand eines iPhone-Fotos. Es gibt bewusst noch keine PV-, Sonnenstands- oder Verschattungssimulation.
 
 ## Start
 
@@ -21,12 +21,17 @@ Vite zeigt danach die lokale URL an. Weitere Prüfungen:
 - Die **Fotokamera** wird numerisch oder per Slider über Position, Azimut, Elevation, Rollwinkel und vertikalen Bildwinkel eingestellt.
 - Beim Laden eines Fotos wird sein natives Seitenverhältnis übernommen und gesperrt. Foto und WebGL-Projektion belegen damit exakt dieselbe unverzerrte Fläche.
 - Jedes geladene Foto erhält automatisch die vorgeschriebene Rotation um 90° gegen den Uhrzeigersinn. Es kann anschließend in 90°-Schritten weitergedreht oder auf diese Pflichtrotation zurückgesetzt werden.
-- Das zuletzt ausgewählte Originalfoto wird ausschließlich lokal in IndexedDB gespeichert und beim nächsten Start automatisch wiederhergestellt, bis ein anderes Foto gewählt wird. Bei einem neuen Foto setzt die Anwendung 90° CCW, das tatsächliche Seitenverhältnis und den aus 26 mm abgeleiteten FOV automatisch; beim Neuladen bleiben spätere manuelle Kalibrierwerte erhalten.
+- Das zuletzt ausgewählte Originalfoto wird ausschließlich lokal in IndexedDB gespeichert und beim nächsten Start automatisch wiederhergestellt, bis ein anderes Foto gewählt wird. Für die feste Stativserie bleiben Kamera, Drehung und Messpunkte beim Foto-Wechsel erhalten. Ein anderes Seitenverhältnis deaktiviert die Messpunkte zur Prüfung. 26 mm Kleinbildäquivalent ist der anfängliche Optikwert; es gibt keinen automatischen FOV-Reset bei einem neuen Foto.
 - Die 3D-Deckkraft und die Darstellung von Foto, Modell oder Überlagerung sind umschaltbar.
-- Haus- und Kamerakonfiguration können als JSON exportiert/importiert werden. Die letzte gültige Konfiguration bleibt zusätzlich im localStorage des Browsers erhalten. Das Foto selbst wird weder gespeichert noch hochgeladen.
+- Haus- und Kamerakonfiguration können als JSON exportiert/importiert werden. Die letzte gültige Konfiguration bleibt zusätzlich im localStorage des Browsers erhalten. Das Originalfoto liegt getrennt in IndexedDB und wird nicht hochgeladen.
 - Sämtliche Kalibrierungsmarkierungen lassen sich gemeinsam ein- und ausblenden; diese Ansichtseinstellung wird mit der Konfiguration gespeichert.
-- In der Punktkalibrierung werden bekannte Modellpunkte ausgewählt und im Foto angeklickt. Die äußeren Dachecken enthalten Trauf- und Giebelüberstand und entsprechen damit den gut sichtbaren äußersten Dachpunkten. Ein Präzisionskreuz, stufenloser Mausrad-Zoom von 100 bis 1200 Prozent und Verschieben per Ziehen erleichtern die Auswahl. Eine Ziehbewegung setzt keinen Punkt. Ab vier Beobachtungen optimiert die Anwendung Position, Azimut, Elevation und Roll der Fotokamera; der optische FOV bleibt dabei bewusst fixiert.
-- Kalibrierpunkte werden automatisch gespeichert und sind Teil des JSON-Imports und -Exports. Zoom und Bildverschiebung werden als lokale Arbeitsansicht wiederhergestellt, aber nicht in die geometrische JSON-Konfiguration aufgenommen.
+- Im gemeinsamen Bereich **Kalibrierung** Objekt und Eckpunkt auswählen und im Foto setzen. Beide Fenster, Gebäude-/Dachpunkte sowie Dachanschluss und Öffnung des Kamins verwenden dieselbe Erfassung. Ein bestehender Punkt kann per Messpunkt-Klick oder über seine Tabellenzeile erneut gesetzt werden. Jede Zeile erlaubt Aktivierung, Messgewicht und Löschen.
+- Ein Präzisionskreuz, Mausrad-Zoom von 100 bis 1200 Prozent und Verschieben per Ziehen erleichtern die Auswahl. Ziehen setzt keinen Punkt. In der freien Ansicht gelten weiterhin die normalen OrbitControls.
+- **Kalibrierung berechnen** optimiert alle aktiven Messpunkte gemeinsam. Standardmäßig sind nur die sechs Kamerapose-Parameter freigegeben. Im Expertenbereich lassen sich FOV, Bildmittelpunkt, unsichere Geometrie, Kaminoberkante und lokale Objektkorrekturen freigeben; Grenzen und aktuelle Werte sind dort sichtbar und editierbar.
+- Kreise zeigen Messpunkte, cyanfarbene Kreuze die Modellprojektion; Linien verbinden beide. Die Fehlerliste ist absteigend nach Einzelpunktfehler sortiert. RMS und Maximum verwenden aktive Punkte und echte Originalbild-Pixel, unabhängig von Fenstergröße und Zoom. Die robusten Gewichte sind am Fehlerwert als Tooltip sichtbar. Ein ausgeblendeter Punkt bleibt für die Optimierung aktiv; der Aktivierungshaken in seiner Zeile steuert die Teilnahme.
+- Konfiguration einschließlich aller Messpunkte, Freigaben, Grenzen und Korrekturen wird lokal und als JSON gespeichert. Zoom und Bildverschiebung werden separat als lokale Arbeitsansicht gespeichert.
+- Phase-1-Konfigurationen werden automatisch nach Version 2 migriert. Vorher wird das exakte Original gesichert und bleibt über **Phase-1-Original exportieren** exportierbar. Unbekannte Punkte werden mit Hinweis gesichert, nicht falsch zugeordnet.
+- Der getrennte Arbeitsbereich **Dachvermessung** lädt eine Drohnenaufnahme nur temporär, entzerrt die Dachhälfte aus vier Ecken und vergleicht Kamin sowie beide Fenster metrisch mit dem PV-Plan. Die beiden Maßsätze 10,73 × 6,29 m und 10,83 × 6,24 m sind umschaltbar, ohne das Hausmodell zu ändern. Messwerte, Zentimeterdifferenzen und eine vorsichtige Unsicherheitsschätzung lassen sich als JSON exportieren. PV-Module in der Aufnahme gelten ausdrücklich als nachträgliche Planzeichnung. Details: [docs/phase2.1-drone.md](docs/phase2.1-drone.md).
 
 ## Koordinaten- und Winkelkonventionen
 
@@ -50,7 +55,7 @@ Für die Fotokamera gilt:
 - FOV ist der **vertikale** Bildwinkel.
 - Die 35-mm-äquivalente Umrechnung verwendet die Kleinbilddiagonale von 43,27 mm und das eingestellte Bildseitenverhältnis.
 
-Die Projektion ist in Phase 1 eine ideale Lochkamera. Das Konfigurationsfeld lensDistortion ist für eine spätere, datengetriebene radiale/tangentiale Korrektur reserviert und derzeit immer null.
+Die Projektion ist eine ideale Lochkamera. Der optische Mittelpunkt kann in NDC (rechts/oben positiv) verschoben werden. Das Konfigurationsfeld lensDistortion ist für eine spätere, datengetriebene radiale/tangentiale Korrektur reserviert und derzeit immer null.
 
 ## Referenzaufnahme vom 27. Oktober 2026
 
@@ -94,10 +99,10 @@ Der Ursprung liegt links unten an der Traufe. Die Plan-X-Koordinate läuft entla
 Die frühere Störfläche 02 „Lüftung“ (X 4,526–4,680 m, Y 1,782–1,994 m) wurde überbaut und wird daher nicht mehr im aktiven Modell dargestellt. Auch beim Import älterer Konfigurationen wird sie entfernt.
 Die Beschriftung der Störflächen ist standardmäßig ausgeblendet und kann im Bereich „Gebäude & Dach“ eingeschaltet werden. Eingeschaltete Beschriftungen liegen als Texturen in der Dachfläche und folgen daher der perspektivischen Projektion.
 
-Die Störflächenkalibrierung verwendet zunächst die vier sichtbaren Ecken des Bad-Fensters. Sie optimiert gemeinsamen Versatz und Maßstab des PV-Planrasters entlang der Dachkante und Dachschräge. Das Ergebnis wird auf alle Störflächen angewendet, automatisch gespeichert und mit der JSON-Konfiguration exportiert. Beim Wechsel des Fotos bleiben die ermittelten Rasterparameter erhalten; nur die bildabhängigen Klickpunkte werden gelöscht.
-Mit dem Schalter „Gespeicherte Störflächenkalibrierung verwenden“ kann jederzeit zwischen den unveränderten PV-Planwerten und der kalibrierten Darstellung verglichen werden, ohne die gespeicherten Korrekturwerte zu löschen.
+Die Plan-Koordinaten bleiben als Referenz erhalten. Optionale Korrekturen werden pro Objekt separat gespeichert: Versatz in Metern und Maßfaktoren entlang First und Dachschräge. Es gibt keine gemeinsame Rasteroptimierung mehr. Eine aktive alte Rasterkorrektur wird bei der Migration auf explizite lokale Korrekturen aller Objekte übertragen und als Altbestand kenntlich gemacht; inaktive Altwerte bleiben im Original-Backup.
 
-Der Kamin wird als vertikaler 3D-Körper mit waagerechter Oberkante und vier unterschiedlich gefärbten Seitenflächen dargestellt. Für die Fotokalibrierung wird nur seine sichtbare Front verwendet: unten links/rechts am Dachdurchtritt und direkt darüber oben links/rechts an der Kaminöffnung. Die im Foto nicht sichtbare Tiefe stammt weiterhin aus der dokumentierten Grundfläche. Seine Höhe kann numerisch eingegeben oder aus mindestens einer oberen Kaminecke optimiert werden. Höhe und Kalibrierung werden ebenfalls automatisch und im JSON gespeichert.
+Der Kamin wird als vertikaler Körper mit waagerechter Öffnung und unterschiedlich gefärbten Seiten dargestellt. Seine Oberkante ist eine **absolute Y-Höhe in Metern über Modellnull**. Die unteren vier Ecken sind der Schnitt seiner vertikalen Wände mit der geneigten Dachebene. Alle acht Punkte sind auswählbar; für die sichtbare Front genügen die beiden traufseitigen Dachanschlüsse und die direkt darüberliegenden Öffnungsecken. Bei der Migration entspricht die neue absolute Oberkante dem bisherigen höchsten Dachanschlusspunkt plus alter Kaminhöhe.
+
 Störflächen und Kamin werden transparent über das Referenzfoto gelegt. Ihre Deckkraft folgt der allgemeinen Modelldeckkraft mit einem zusätzlichen Transparenzfaktor, damit die darunterliegenden Bilddetails sichtbar bleiben.
 
 ## Struktur
@@ -107,3 +112,9 @@ Störflächen und Kamin werden transparent über das Referenzfoto gelegt. Ihre D
 - src/config: Standardwerte, Validierung und JSON-Serialisierung
 - src/ui: Definitionen der Bedienelemente
 - tests: automatisierte Geometrie-, Optik- und Persistenztests
+
+## Verfahren und Grenzen
+
+Der gemeinsame Optimierer verwendet begrenztes Levenberg–Marquardt mit numerischer Jacobi-Matrix, skalierten Parameterschritten und punktweiser Huber-Gewichtung (Standard 4 Originalpixel). Die Informationsmatrix wird auf Rang und Kondition geprüft. Nicht beobachtbare Parameterkombinationen, ungültige Geometrie und fehlende Konvergenz werden nicht übernommen. Stark korrelierte oder an Grenzen liegende Parameter werden mit Warnung angezeigt. Details, Migration und Abnahme: [docs/phase2.md](docs/phase2.md).
+
+Die feste Stativserie liefert dieselbe Ansicht; zusätzliche Fotos allein schaffen keine zusätzliche 3D-Perspektive. Punkte in einer einzigen Dachebene erlauben bei freier Optik und Geometrie keine beliebig präzise Trennung der Fehlerursachen. Bekannte Maße zunächst sperren, räumlich verteilte Referenzen setzen und nur begründet zusätzliche Parameter freigeben. Das tatsächliche Südzimmerfenster kann erst anhand seiner im Originalfoto gesetzten Ecken beurteilt werden; die Anwendung behauptet keine automatische Ursache.
